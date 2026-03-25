@@ -4,6 +4,16 @@ A best-effort scanner that **attempts to detect** indicators of compromise (IOCs
 
 > **No guarantees.** This tool attempts to find known artifacts associated with the compromise. It does **not** guarantee detection of all malicious activity, nor does it guarantee that a clean scan means your system was not affected. A determined attacker may have removed traces, and the tool cannot detect secrets that have already been exfiltrated. Use this scanner as one input in your incident response — not as a definitive verdict.
 
+## Quick Start
+
+```bash
+# Linux / macOS
+python3 run_scan.py
+
+# Windows (PowerShell or cmd.exe)
+python run_scan.py
+```
+
 ## Video Overview
 
 This scanner was inspired by [Fahd Mirza's video](https://www.youtube.com/watch?v=YoClPk7KqZc) highlighting the incident — thanks to him for bringing it to attention.
