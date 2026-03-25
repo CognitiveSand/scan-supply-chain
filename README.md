@@ -81,8 +81,8 @@ This scanner makes a best-effort attempt to detect known IOCs. It automatically 
 
 | Phase | What It Looks For |
 |-------|-------------------|
-| 1 | Python interpreters (Linux: `/home`, `/opt`, `/usr`, `/srv`, `/var`; Windows: `%USERPROFILE%`, `%APPDATA%`, `Program Files`) |
-| 2 | Installed litellm versions in discovered Python environments |
+| 1 | litellm metadata directories (`dist-info` / `egg-info`) across filesystem (Linux: `/home`, `/opt`, `/usr`, `/srv`, `/var`; Windows: `%USERPROFILE%`, `%APPDATA%`, `Program Files`) |
+| 2 | litellm version from metadata files — no Python interpreter execution needed |
 | 3 | IOC artifacts: `litellm_init.pth`, sysmon persistence, temp staging files, C2 network connections, suspicious Kubernetes pods. On Windows: also checks Registry Run keys and Scheduled Tasks |
 | 4 | Source files and dependency configs (pyproject.toml, requirements.txt, etc.) that reference litellm, flagging any pinned to compromised versions |
 
@@ -97,14 +97,16 @@ This scanner makes a best-effort attempt to detect known IOCs. It automatically 
 
 ## Usage
 
-```bash
-# Linux / macOS
-python3 run_scan.py
-python3 -m scan_litellm_compromise
+**Linux / macOS:**
 
-# Windows (PowerShell or cmd.exe) — use py, or python as fallback
+```bash
+python3 run_scan.py
+```
+
+**Windows — double-click `run_scan.bat`**, or from a terminal:
+
+```cmd
 py run_scan.py
-py -m scan_litellm_compromise
 ```
 
 The scanner auto-detects the platform and adjusts scan paths, network commands, and persistence checks accordingly.
@@ -115,7 +117,7 @@ Exit code is `1` if compromise indicators are found, `0` otherwise.
 
 | Feature | Linux | Windows 10/11 |
 |---------|-------|---------------|
-| Python environment discovery | `/home`, `/opt`, `/usr`, `/srv`, `/var` | `%USERPROFILE%`, `%APPDATA%`, `Program Files` |
+| litellm detection | Scans `dist-info` / `egg-info` metadata in `/home`, `/opt`, `/usr`, `/srv`, `/var` | Scans metadata in `%USERPROFILE%`, `%APPDATA%`, `Program Files` |
 | Conda/pipx detection | `/opt/conda`, `~/.local/share/pipx` | `%LOCALAPPDATA%\Miniconda3`, `%LOCALAPPDATA%\pipx` |
 | Persistence check | systemd user services | Registry Run keys, Scheduled Tasks, Startup folder |
 | Temp artifacts | `/tmp/` | `%TEMP%` |
@@ -171,8 +173,9 @@ scan_litellm_compromise/
   platform_linux.py      Linux-specific paths and commands
   platform_windows.py    Windows-specific paths and commands
   ioc_windows.py         Windows-only IOC checks (Registry, Tasks)
-  discovery.py           Phase 1 — find Python environments
-  version_checker.py     Phase 2 — check litellm versions
+  discovery.py           Phase 1 — find litellm metadata directories
+  version_checker.py     Phase 2 — read litellm version from metadata
+  run_scan.bat           Double-click launcher for Windows
   ioc_scanner.py         Phase 3 — IOC artifact detection
   source_scanner.py      Phase 4 — source/config file scanning
   report.py              Phase 5 — summary and remediation
