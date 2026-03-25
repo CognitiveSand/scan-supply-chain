@@ -6,13 +6,28 @@ A best-effort scanner that **attempts to detect** indicators of compromise (IOCs
 
 ## Quick Start
 
-```bash
-# Linux / macOS
-python3 run_scan.py
+**1. Download the scanner:**
 
-# Windows (PowerShell or cmd.exe)
+```bash
+git clone https://github.com/CognitiveSand/scan_litellm_compromise.git
+cd scan_litellm_compromise
+```
+
+**2. Run it:**
+
+On **Linux / macOS** — open a terminal and run:
+
+```bash
+python3 run_scan.py
+```
+
+On **Windows** — open PowerShell (search "PowerShell" in the Start menu) or Command Prompt (`Win+R`, type `cmd`, press Enter), then run:
+
+```cmd
 python run_scan.py
 ```
+
+No dependencies required — uses only the Python standard library.
 
 ## Video Overview
 
