@@ -1,8 +1,11 @@
 """Phase 4: Scan source files and configs for litellm usage."""
 
+from __future__ import annotations
+
 import logging
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .config import (
     CONFIG_EXTENSIONS,
@@ -10,14 +13,16 @@ from .config import (
     PYTHON_IMPORT_PATTERNS,
     REQUIREMENTS_FILENAME_PATTERN,
     REQUIREMENTS_PATTERN,
-    SEARCH_ROOTS,
-    SKIP_DIRS,
+    SOURCE_SCAN_SKIP_DIRS,
     SOURCE_EXTENSIONS,
     TOML_BARE_PATTERN,
     TOML_DEPENDENCY_PATTERN,
     PINNED_VERSION_PATTERN,
 )
 from .models import ConfigReference, ScanResults, SourceReference
+
+if TYPE_CHECKING:
+    from .platform_policy import PlatformPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +45,9 @@ def _deduplicate_roots(roots: list[str]) -> list[str]:
     return [original for original, _ in kept]
 
 
-def _build_scan_roots() -> list[str]:
+def _build_scan_roots(policy: PlatformPolicy) -> list[str]:
     """Build deduplicated list of directories to scan."""
-    return _deduplicate_roots(SEARCH_ROOTS + [str(Path.home())])
+    return _deduplicate_roots(policy.search_roots + [str(Path.home())])
 
 
 # ── File classification ──────────────────────────────────────────────────
@@ -119,12 +124,12 @@ def _scan_file_lines(
 # ── Public entry point ───────────────────────────────────────────────────
 
 
-def scan_source_and_configs(results: ScanResults) -> int:
+def scan_source_and_configs(results: ScanResults, policy: PlatformPolicy) -> int:
     """Scan source and config files for litellm usage.
 
     Returns the number of files scanned.
     """
-    scan_roots = _build_scan_roots()
+    scan_roots = _build_scan_roots(policy)
     scanner_dir = str(Path(__file__).resolve().parent)
     seen_files: set[str] = set()
     files_scanned = 0
@@ -138,7 +143,7 @@ def scan_source_and_configs(results: ScanResults) -> int:
             continue
         try:
             for dirpath, dirnames, filenames in os.walk(root_path):
-                dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+                dirnames[:] = [d for d in dirnames if d not in SOURCE_SCAN_SKIP_DIRS]
                 dir_path = Path(dirpath)
 
                 for filename in filenames:

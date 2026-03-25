@@ -1,14 +1,16 @@
 """Phase 3: Scan for Indicators of Compromise (IOC) artifacts."""
 
+from __future__ import annotations
+
 import logging
 import os
 import shutil
 import socket
 import subprocess
 from pathlib import Path
-from typing import Iterable
+from typing import TYPE_CHECKING, Iterable
 
-from .config import C2_DOMAINS, SYSMON_PATHS, TMP_IOCS
+from .config import C2_DOMAINS
 from .formatting import (
     BOLD,
     RED,
@@ -19,10 +21,10 @@ from .formatting import (
 )
 from .models import ScanResults
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from .platform_policy import PlatformPolicy
 
-# NOTE: /root is intentionally excluded — this scanner does not access root-owned paths.
-_PTH_SEARCH_ROOTS = ["/home", "/opt", "/usr", "/var", "/srv"]
+logger = logging.getLogger(__name__)
 
 
 # ── DRY helper for path-based IOC checks ────────────────────────────────
@@ -49,11 +51,11 @@ def _check_known_paths(
 # ── Individual IOC scanners ──────────────────────────────────────────────
 
 
-def _scan_for_backdoor_pth(results: ScanResults) -> None:
+def _scan_for_backdoor_pth(results: ScanResults, policy: PlatformPolicy) -> None:
     """Walk filesystem looking for litellm_init.pth auto-exec backdoor."""
     print_check_header("litellm_init.pth (auto-exec backdoor)")
     found = False
-    for root in _PTH_SEARCH_ROOTS:
+    for root in policy.pth_search_roots:
         root_path = Path(root)
         if not root_path.is_dir():
             continue
@@ -70,29 +72,34 @@ def _scan_for_backdoor_pth(results: ScanResults) -> None:
         print_clean()
 
 
-def _scan_for_sysmon_persistence(results: ScanResults) -> None:
-    """Check for sysmon systemd backdoor persistence."""
-    expanded = [Path(os.path.expanduser(sp)) for sp in SYSMON_PATHS]
-    _check_known_paths("sysmon persistence (systemd backdoor)", expanded, results)
+def _scan_for_persistence(results: ScanResults, policy: PlatformPolicy) -> None:
+    """Check for sysmon backdoor persistence."""
+    expanded = [Path(os.path.expanduser(sp)) for sp in policy.persistence_paths]
+    _check_known_paths(policy.persistence_description, expanded, results)
 
 
-def _scan_for_exfiltration_artifacts(results: ScanResults) -> None:
-    """Check /tmp for known exfiltration artifacts."""
-    tmp_paths = [Path(artifact) for artifact in TMP_IOCS]
-    _check_known_paths("exfiltration artifacts (/tmp)", tmp_paths, results)
+def _scan_for_exfiltration_artifacts(
+    results: ScanResults, policy: PlatformPolicy
+) -> None:
+    """Check temp directory for known exfiltration artifacts."""
+    tmp_paths = [Path(artifact) for artifact in policy.tmp_iocs]
+    _check_known_paths(policy.tmp_description, tmp_paths, results)
 
 
-def _scan_for_c2_connections(results: ScanResults) -> None:
+def _scan_for_c2_connections(
+    results: ScanResults, policy: PlatformPolicy
+) -> None:
     """Check active network connections for C2 domain communication."""
     print_check_header("active network connections for C2 domains")
-    if not shutil.which("ss"):
-        print_clean("ss not available, skipping")
+    command = policy.network_check_command
+    if command is None or not shutil.which(command[0]):
+        print_clean(f"{command[0] if command else 'network tool'} not available, skipping")
         return
 
     found = False
     try:
         socket_output = subprocess.run(
-            ["ss", "-tnp"], capture_output=True, text=True, timeout=5
+            command, capture_output=True, text=True, timeout=5
         ).stdout
 
         for domain in C2_DOMAINS:
@@ -108,7 +115,7 @@ def _scan_for_c2_connections(results: ScanResults) -> None:
             except socket.gaierror:
                 logger.debug("Cannot resolve C2 domain %s", domain)
     except (subprocess.TimeoutExpired, OSError):
-        logger.debug("Failed to run ss command")
+        logger.debug("Failed to run network check command")
 
     if not found:
         print_clean("No suspicious connections")
@@ -148,13 +155,14 @@ def _scan_for_malicious_pods(results: ScanResults) -> None:
 # ── Public entry point ───────────────────────────────────────────────────
 
 
-def scan_iocs(results: ScanResults) -> None:
+def scan_iocs(results: ScanResults, policy: PlatformPolicy) -> None:
     """Run all IOC artifact scans."""
-    _scan_for_backdoor_pth(results)
+    _scan_for_backdoor_pth(results, policy)
     print()
-    _scan_for_sysmon_persistence(results)
+    _scan_for_persistence(results, policy)
     print()
-    _scan_for_exfiltration_artifacts(results)
+    _scan_for_exfiltration_artifacts(results, policy)
     print()
-    _scan_for_c2_connections(results)
+    _scan_for_c2_connections(results, policy)
     _scan_for_malicious_pods(results)
+    policy.extra_ioc_checks(results)
