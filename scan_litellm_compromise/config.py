@@ -1,32 +1,12 @@
-"""Constants and configuration for the LiteLLM supply chain scanner."""
+"""Cross-platform constants and configuration for the LiteLLM scanner.
+
+Platform-specific values (paths, commands) live in platform_linux.py
+and platform_windows.py. This module holds only platform-neutral config.
+"""
 
 import re
 
 COMPROMISED_VERSIONS = frozenset({"1.82.7", "1.82.8"})
-
-SEARCH_ROOTS = [
-    "/home",
-    "/opt",
-    "/usr/local",
-    "/usr/lib",
-    "/srv",
-    "/var",
-]
-# NOTE: /root is intentionally excluded — this scanner does not access root-owned paths.
-
-CONDA_GLOBS = [
-    "/opt/conda",
-    "/opt/miniconda*",
-    "/opt/miniforge*",
-]
-
-SYSMON_PATHS = [
-    "~/.config/sysmon/sysmon.py",
-    "~/.config/systemd/user/sysmon.service",
-]
-# NOTE: /root sysmon paths excluded — this scanner does not access root-owned paths.
-
-TMP_IOCS = ["/tmp/pglog", "/tmp/.pg_state", "/tmp/tpcp.tar.gz"]
 
 C2_DOMAINS = ["models.litellm.cloud", "checkmarx.zone"]
 
@@ -62,7 +42,7 @@ CONFIG_FILENAMES = frozenset({
 
 CONFIG_EXTENSIONS = frozenset({".toml", ".cfg"})
 
-# ── Regex patterns ──────────────────────────────────────────────────────
+# ── Regex patterns (platform-neutral) ───────────────────────────────────
 
 PYTHON_IMPORT_PATTERNS = [
     re.compile(r"^\s*import\s+litellm"),

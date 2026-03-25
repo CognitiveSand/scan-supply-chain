@@ -1,58 +1,58 @@
 """Phase 1: Discover Python environments on the system."""
 
+from __future__ import annotations
+
 import glob as globmod
 import logging
 import os
-import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from .config import CONDA_GLOBS, SEARCH_ROOTS
+if TYPE_CHECKING:
+    from .platform_policy import PlatformPolicy
 
 logger = logging.getLogger(__name__)
 
-_PYTHON_BINARY_NAMES = frozenset({"python", "python3"})
-_PYTHON_VERSIONED_RE = re.compile(r"^python3\.\d+$")
 _NOISE_DIRS = frozenset({"__pycache__", ".git", "node_modules"})
-_SYSTEM_PYTHONS = ["/usr/bin/python3", "/usr/bin/python"]
 
 
-def _build_search_roots() -> list[str]:
-    """Combine standard roots with user-local conda/pipx directories."""
-    roots = list(SEARCH_ROOTS)
+def _build_search_roots(policy: PlatformPolicy) -> list[str]:
+    """Combine platform roots with user-local conda/pipx directories."""
+    roots = list(policy.search_roots)
     home = Path.home()
 
-    for extra_dir in ["miniconda3", "miniforge3", "anaconda3", ".conda"]:
+    for extra_dir in policy.home_conda_dirs():
         candidate = home / extra_dir
         if candidate.is_dir():
             roots.append(str(candidate))
 
-    pipx_dir = home / ".local" / "share" / "pipx"
-    if pipx_dir.is_dir():
+    pipx_dir = policy.home_pipx_dir()
+    if pipx_dir is not None:
         roots.append(str(pipx_dir))
 
-    for pattern in CONDA_GLOBS:
+    for pattern in policy.conda_globs:
         roots.extend(globmod.glob(pattern))
 
     return roots
 
 
-def _is_python_binary(filename: str) -> bool:
+def _is_python_binary(filename: str, policy: PlatformPolicy) -> bool:
     return (
-        filename in _PYTHON_BINARY_NAMES
-        or bool(_PYTHON_VERSIONED_RE.match(filename))
+        filename in policy.python_binary_names
+        or bool(policy.python_versioned_re.match(filename))
     )
 
 
-def _walk_for_pythons(root: Path) -> list[Path]:
+def _walk_for_pythons(root: Path, policy: PlatformPolicy) -> list[Path]:
     """Walk a directory tree and return executable Python interpreters."""
     found = []
     try:
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [d for d in dirnames if d not in _NOISE_DIRS]
             for filename in filenames:
-                if _is_python_binary(filename):
+                if _is_python_binary(filename, policy):
                     full_path = Path(dirpath) / filename
-                    if full_path.is_file() and os.access(full_path, os.X_OK):
+                    if policy.is_executable_python(full_path):
                         found.append(full_path)
     except PermissionError:
         logger.debug("Permission denied walking %s", root)
@@ -74,19 +74,19 @@ def _deduplicate_by_realpath(paths: list[Path]) -> list[Path]:
     return unique
 
 
-def find_python_envs() -> list[Path]:
+def find_python_envs(policy: PlatformPolicy) -> list[Path]:
     """Find all unique Python interpreters on the system."""
-    roots = _build_search_roots()
+    roots = _build_search_roots(policy)
     found: list[Path] = []
 
     for root in roots:
         root_path = Path(root)
         if root_path.is_dir():
-            found.extend(_walk_for_pythons(root_path))
+            found.extend(_walk_for_pythons(root_path, policy))
 
-    for system_python in _SYSTEM_PYTHONS:
+    for system_python in policy.system_pythons:
         path = Path(system_python)
-        if path.is_file() and os.access(path, os.X_OK):
+        if policy.is_executable_python(path):
             found.append(path)
 
     return _deduplicate_by_realpath(found)

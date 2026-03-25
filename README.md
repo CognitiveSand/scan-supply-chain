@@ -50,13 +50,13 @@ If a Kubernetes service account token is found, the payload deploys **privileged
 
 ## What This Scanner Attempts to Find
 
-This scanner makes a best-effort attempt to detect known IOCs. It does **not** access `/root` or other root-owned paths — it only inspects user-accessible locations.
+This scanner makes a best-effort attempt to detect known IOCs. It automatically detects the platform (Linux or Windows) and adjusts scan paths accordingly.
 
 | Phase | What It Looks For |
 |-------|-------------------|
-| 1 | Python interpreters across `/home`, `/opt`, `/usr`, `/srv`, `/var` |
+| 1 | Python interpreters (Linux: `/home`, `/opt`, `/usr`, `/srv`, `/var`; Windows: `%USERPROFILE%`, `%APPDATA%`, `Program Files`) |
 | 2 | Installed litellm versions in discovered Python environments |
-| 3 | IOC artifacts: `litellm_init.pth`, sysmon persistence, `/tmp` staging files, C2 network connections, suspicious Kubernetes pods |
+| 3 | IOC artifacts: `litellm_init.pth`, sysmon persistence, temp staging files, C2 network connections, suspicious Kubernetes pods. On Windows: also checks Registry Run keys and Scheduled Tasks |
 | 4 | Source files and dependency configs (pyproject.toml, requirements.txt, etc.) that reference litellm, flagging any pinned to compromised versions |
 
 ## Limitations
@@ -64,27 +64,43 @@ This scanner makes a best-effort attempt to detect known IOCs. It does **not** a
 - **This scanner cannot detect exfiltrated secrets.** If your credentials were sent to the attacker's C2 server, no local scan can undo that. Credential rotation is required regardless of scan results.
 - **Artifacts may have been cleaned up.** The absence of IOC files does not prove the system was never compromised.
 - **The scanner does not inspect Docker image layers, CI/CD runner caches, or remote systems.** Each environment must be checked independently.
-- **Root-owned paths (`/root`) are excluded.** If you need to scan those, run a separate check with appropriate privileges.
+- **Root-owned paths (`/root` on Linux) are excluded.** If you need to scan those, run a separate check with appropriate privileges.
 - **The scanner cannot decrypt exfiltrated data.** Only the attacker holds the RSA-4096 private key.
+- **Windows Registry scanning is best-effort.** The scanner checks common Run key locations but cannot cover all possible persistence mechanisms (WMI subscriptions, COM hijacking, etc.).
 
 ## Usage
 
 ```bash
-# Run directly
+# Linux / macOS
 python3 run_scan.py
-
-# Or as a module
 python3 -m scan_litellm_compromise
+
+# Windows (PowerShell or cmd.exe)
+python run_scan.py
+python -m scan_litellm_compromise
 ```
 
+The scanner auto-detects the platform and adjusts scan paths, network commands, and persistence checks accordingly.
+
 Exit code is `1` if compromise indicators are found, `0` otherwise.
+
+## Platform Support
+
+| Feature | Linux | Windows 10/11 |
+|---------|-------|---------------|
+| Python environment discovery | `/home`, `/opt`, `/usr`, `/srv`, `/var` | `%USERPROFILE%`, `%APPDATA%`, `Program Files` |
+| Conda/pipx detection | `/opt/conda`, `~/.local/share/pipx` | `%LOCALAPPDATA%\Miniconda3`, `%LOCALAPPDATA%\pipx` |
+| Persistence check | systemd user services | Registry Run keys, Scheduled Tasks, Startup folder |
+| Temp artifacts | `/tmp/` | `%TEMP%` |
+| Network connections | `ss -tnp` | `netstat -ano` |
+| ANSI terminal colors | Native | Auto-enabled via Virtual Terminal Processing |
 
 ## If Compromise Is Detected
 
 **Assume ALL secrets on the affected machine are compromised.** The following steps are recommended — this list is not exhaustive:
 
 1. **Rotate credentials immediately** — SSH keys, cloud provider credentials (AWS/GCP/Azure), API keys, database passwords, CI/CD tokens, `.env` file contents
-2. **Remove malicious artifacts** — delete `litellm_init.pth`, `~/.config/sysmon/`, sysmon.service, and `/tmp` staging files
+2. **Remove malicious artifacts** — delete `litellm_init.pth`, sysmon persistence files, and temp staging files (see platform-specific paths above)
 3. **Downgrade litellm** — `pip install litellm==1.82.6` (last known clean version) or upgrade past the compromised range once verified safe
 4. **Update pinned versions** — check all `requirements.txt`, `pyproject.toml`, and lock files for references to 1.82.7 or 1.82.8
 5. **Inspect Kubernetes clusters** — look for `node-setup-*` pods in `kube-system`, audit ClusterRoleBindings
@@ -119,17 +135,21 @@ Exit code is `1` if compromise indicators are found, `0` otherwise.
 
 ```
 scan_litellm_compromise/
-  __main__.py          Entry point for python -m
-  scanner.py           Orchestrator
-  config.py            Constants, patterns, thresholds
-  models.py            Typed data structures
-  formatting.py        Terminal output helpers
-  discovery.py         Phase 1 — find Python environments
-  version_checker.py   Phase 2 — check litellm versions
-  ioc_scanner.py       Phase 3 — IOC artifact detection
-  source_scanner.py    Phase 4 — source/config file scanning
-  report.py            Phase 5 — summary and remediation
-run_scan.py            Direct entry point
+  __main__.py            Entry point for python -m
+  scanner.py             Orchestrator
+  config.py              Cross-platform constants and patterns
+  models.py              Typed data structures
+  formatting.py          Terminal output (ANSI with Windows support)
+  platform_policy.py     Platform abstraction (Strategy pattern)
+  platform_linux.py      Linux-specific paths and commands
+  platform_windows.py    Windows-specific paths and commands
+  ioc_windows.py         Windows-only IOC checks (Registry, Tasks)
+  discovery.py           Phase 1 — find Python environments
+  version_checker.py     Phase 2 — check litellm versions
+  ioc_scanner.py         Phase 3 — IOC artifact detection
+  source_scanner.py      Phase 4 — source/config file scanning
+  report.py              Phase 5 — summary and remediation
+run_scan.py              Direct entry point
 ```
 
 ## Disclaimer

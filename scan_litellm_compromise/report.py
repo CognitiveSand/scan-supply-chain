@@ -1,7 +1,14 @@
 """Phase 5: Summary report and remediation guidance."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from .formatting import BOLD, GREEN, RED, RESET, YELLOW, print_separator
 from .models import ConfigReference, ScanResults, SourceReference
+
+if TYPE_CHECKING:
+    from .platform_policy import PlatformPolicy
 
 _MAX_LINES_PER_FILE = 5
 
@@ -121,7 +128,7 @@ def _print_stats(results: ScanResults) -> None:
 # ── Verdicts ─────────────────────────────────────────────────────────────
 
 
-def _print_remediation(results: ScanResults) -> None:
+def _print_remediation(results: ScanResults, policy: PlatformPolicy) -> None:
     """Print remediation steps for a compromised system."""
     print()
     print_separator()
@@ -132,9 +139,8 @@ def _print_remediation(results: ScanResults) -> None:
     print(f"     -> Revoke and regenerate .env files and .gitconfig tokens")
     print()
     print(f"  2. {BOLD}Remove malicious artifacts:{RESET}")
-    print(f"     -> Delete any litellm_init.pth files from site-packages/")
-    print(f"     -> Remove ~/.config/sysmon/ and sysmon.service")
-    print(f"     -> Remove /tmp/pglog, /tmp/.pg_state, /tmp/tpcp.tar.gz")
+    for line in policy.remediation_artifact_lines():
+        print(f"     {line}")
     print()
     print(f"  3. {BOLD}Fix litellm:{RESET}")
     print(f"     -> pip install litellm==1.82.6  (last known safe version)")
@@ -153,9 +159,9 @@ def _print_remediation(results: ScanResults) -> None:
     print(f"     -> Delete any node-setup-* pods in kube-system namespace")
     print(f"     -> Audit cluster for privileged pods with host mounts")
     print()
-    print(f"  6. {BOLD}Check systemd for persistence:{RESET}")
-    print(f"     -> systemctl --user list-units | grep sysmon")
-    print(f"     -> systemctl list-units | grep sysmon")
+    print(f"  6. {BOLD}{policy.remediation_persistence_steps()[0]}{RESET}")
+    for step in policy.remediation_persistence_steps()[1:]:
+        print(f"     {step}")
     print()
     print(f"  Reference: https://github.com/BerriAI/litellm/issues/24512")
     print_separator()
@@ -183,7 +189,7 @@ def _print_clean_verdict(results: ScanResults) -> None:
 # ── Public entry point ───────────────────────────────────────────────────
 
 
-def print_summary(results: ScanResults) -> None:
+def print_summary(results: ScanResults, policy: PlatformPolicy) -> None:
     """Print the final scan summary and verdict."""
     print_separator()
     print(f"\n{BOLD}SCAN RESULTS{RESET}\n")
@@ -192,4 +198,4 @@ def print_summary(results: ScanResults) -> None:
     if results.is_clean:
         _print_clean_verdict(results)
     else:
-        _print_remediation(results)
+        _print_remediation(results, policy)
