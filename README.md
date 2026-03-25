@@ -1,6 +1,6 @@
 # LiteLLM Supply Chain Attack Scanner
 
-A best-effort scanner that **attempts to detect** indicators of compromise (IOCs) left by the malicious LiteLLM PyPI packages v1.82.7 and v1.82.8, published on March 24, 2026 by the threat actor known as **TeamPCP**.
+A best-effort scanner that **attempts to detect** indicators of compromise (IOCs) left by the malicious LiteLLM PyPI packages v1.82.7 and v1.82.8, published on March 24, 2026. The compromise was identified by security researchers at **Endor Labs**, **Datadog Security Labs**, **Snyk**, and **Sonatype**, with the initial public disclosure filed as [GitHub Issue #24512](https://github.com/BerriAI/litellm/issues/24512).
 
 > **No guarantees.** This tool attempts to find known artifacts associated with the compromise. It does **not** guarantee detection of all malicious activity, nor does it guarantee that a clean scan means your system was not affected. A determined attacker may have removed traces, and the tool cannot detect secrets that have already been exfiltrated. Use this scanner as one input in your incident response — not as a definitive verdict.
 
@@ -46,7 +46,7 @@ The packages were available for approximately **3 hours** before PyPI quarantine
 
 ### How the Attack Worked
 
-TeamPCP compromised BerriAI's `PYPI_PUBLISH` token by poisoning the `aquasecurity/trivy-action` GitHub Action used in LiteLLM's CI/CD pipeline. The attacker force-pushed malicious commits onto 75 of 76 existing version tags in the Trivy action repository. When LiteLLM's CI ran, it fetched the attacker-controlled action, which exfiltrated the PyPI publishing token.
+The attacker compromised BerriAI's `PYPI_PUBLISH` token by poisoning the `aquasecurity/trivy-action` GitHub Action used in LiteLLM's CI/CD pipeline. Malicious commits were force-pushed onto 75 of 76 existing version tags in the Trivy action repository. When LiteLLM's CI ran, it fetched the attacker-controlled action, which exfiltrated the PyPI publishing token. This was identified and documented by researchers at **Endor Labs**, **Snyk**, and **StepSecurity**.
 
 ### Three-Stage Payload
 
@@ -145,12 +145,14 @@ Exit code is `1` if compromise indicators are found, `0` otherwise.
 | GitHub Issue #24512 | [Initial disclosure](https://github.com/BerriAI/litellm/issues/24512) |
 | GitHub Issue #24518 | [Official timeline](https://github.com/BerriAI/litellm/issues/24518) |
 
-### Technical Analyses
+### Security Research and Technical Analyses
 
-- [Endor Labs: TeamPCP Isn't Done](https://www.endorlabs.com/learn/teampcp-isnt-done) — full campaign timeline
-- [Datadog Security Labs](https://securitylabs.datadoghq.com/articles/litellm-compromised-pypi-teampcp-supply-chain-campaign/) — payload and artifact details
-- [Snyk](https://snyk.io/articles/poisoned-security-scanner-backdooring-litellm/) — IOC hashes
-- [Sonatype](https://www.sonatype.com/blog/compromised-litellm-pypi-package-delivers-multi-stage-credential-stealer) — stage-by-stage analysis
+- [Endor Labs](https://www.endorlabs.com/learn/teampcp-isnt-done) — full campaign timeline and attribution
+- [Datadog Security Labs](https://securitylabs.datadoghq.com/articles/litellm-compromised-pypi-teampcp-supply-chain-campaign/) — payload and artifact analysis
+- [Snyk](https://snyk.io/articles/poisoned-security-scanner-backdooring-litellm/) — IOC hashes and advisory
+- [Sonatype](https://www.sonatype.com/blog/compromised-litellm-pypi-package-delivers-multi-stage-credential-stealer) — stage-by-stage payload analysis
+- [StepSecurity](https://www.stepsecurity.io/blog/trivy-compromised-a-second-time---malicious-v0-69-4-release) — Trivy supply chain compromise analysis
+- [Microsoft Security Blog](https://www.microsoft.com/en-us/security/blog/2026/03/24/detecting-investigating-defending-against-trivy-supply-chain-compromise/) — detection and defense guidance
 
 ### Known IOC Hashes (SHA-256)
 
