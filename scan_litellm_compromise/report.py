@@ -85,7 +85,7 @@ def print_config_refs(refs: list[ConfigReference]) -> None:
 
 def _print_stats(results: ScanResults) -> None:
     """Print scan statistics."""
-    print(f"  Python environments scanned:  {BOLD}{results.envs_scanned}{RESET}")
+    print(f"  Environments scanned:         {BOLD}{results.envs_scanned}{RESET}")
     print(
         f"  litellm installations found:  "
         f"{BOLD}{len(results.installations)}{RESET}"

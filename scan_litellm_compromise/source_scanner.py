@@ -13,7 +13,7 @@ from .config import (
     PYTHON_IMPORT_PATTERNS,
     REQUIREMENTS_FILENAME_PATTERN,
     REQUIREMENTS_PATTERN,
-    SKIP_DIRS,
+    SOURCE_SCAN_SKIP_DIRS,
     SOURCE_EXTENSIONS,
     TOML_BARE_PATTERN,
     TOML_DEPENDENCY_PATTERN,
@@ -143,7 +143,7 @@ def scan_source_and_configs(results: ScanResults, policy: PlatformPolicy) -> int
             continue
         try:
             for dirpath, dirnames, filenames in os.walk(root_path):
-                dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+                dirnames[:] = [d for d in dirnames if d not in SOURCE_SCAN_SKIP_DIRS]
                 dir_path = Path(dirpath)
 
                 for filename in filenames:

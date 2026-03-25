@@ -1,19 +1,18 @@
-"""Phase 1: Discover Python environments on the system."""
+"""Phase 1: Discover litellm installations via filesystem metadata."""
 
 from __future__ import annotations
 
 import glob as globmod
 import logging
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from .config import DISCOVERY_SKIP_DIRS, DIST_INFO_PATTERN, EGG_INFO_PATTERN
 
 if TYPE_CHECKING:
     from .platform_policy import PlatformPolicy
 
 logger = logging.getLogger(__name__)
-
-_NOISE_DIRS = frozenset({"__pycache__", ".git", "node_modules"})
 
 
 def _build_search_roots(policy: PlatformPolicy) -> list[str]:
@@ -36,24 +35,22 @@ def _build_search_roots(policy: PlatformPolicy) -> list[str]:
     return roots
 
 
-def _is_python_binary(filename: str, policy: PlatformPolicy) -> bool:
-    return (
-        filename in policy.python_binary_names
-        or bool(policy.python_versioned_re.match(filename))
+def _is_litellm_metadata_dir(dirname: str) -> bool:
+    """Check if a directory name is a litellm dist-info or egg-info."""
+    return bool(
+        DIST_INFO_PATTERN.match(dirname) or EGG_INFO_PATTERN.match(dirname)
     )
 
 
-def _walk_for_pythons(root: Path, policy: PlatformPolicy) -> list[Path]:
-    """Walk a directory tree and return executable Python interpreters."""
+def _walk_for_litellm_metadata(root: Path) -> list[Path]:
+    """Walk a directory tree looking for litellm metadata directories."""
     found = []
     try:
-        for dirpath, dirnames, filenames in os.walk(root):
-            dirnames[:] = [d for d in dirnames if d not in _NOISE_DIRS]
-            for filename in filenames:
-                if _is_python_binary(filename, policy):
-                    full_path = Path(dirpath) / filename
-                    if policy.is_executable_python(full_path):
-                        found.append(full_path)
+        for dirpath, dirnames, _ in root.walk():
+            dirnames[:] = [d for d in dirnames if d not in DISCOVERY_SKIP_DIRS]
+            for dirname in dirnames:
+                if _is_litellm_metadata_dir(dirname):
+                    found.append(Path(dirpath) / dirname)
     except PermissionError:
         logger.debug("Permission denied walking %s", root)
     return found
@@ -74,19 +71,14 @@ def _deduplicate_by_realpath(paths: list[Path]) -> list[Path]:
     return unique
 
 
-def find_python_envs(policy: PlatformPolicy) -> list[Path]:
-    """Find all unique Python interpreters on the system."""
+def find_litellm_metadata(policy: PlatformPolicy) -> list[Path]:
+    """Find all litellm dist-info/egg-info directories on the system."""
     roots = _build_search_roots(policy)
     found: list[Path] = []
 
     for root in roots:
         root_path = Path(root)
         if root_path.is_dir():
-            found.extend(_walk_for_pythons(root_path, policy))
-
-    for system_python in policy.system_pythons:
-        path = Path(system_python)
-        if policy.is_executable_python(path):
-            found.append(path)
+            found.extend(_walk_for_litellm_metadata(root_path))
 
     return _deduplicate_by_realpath(found)

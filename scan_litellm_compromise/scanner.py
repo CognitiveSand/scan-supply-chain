@@ -3,7 +3,7 @@
 import logging
 import sys
 
-from .discovery import find_python_envs
+from .discovery import find_litellm_metadata
 from .formatting import BOLD, RESET, print_banner, print_phase_header, print_separator
 from .ioc_scanner import scan_iocs
 from .models import ScanResults
@@ -26,15 +26,15 @@ def main():
     print(f"  {BOLD}NOTE:{RESET} {policy.exclusion_note}\n")
     results = ScanResults()
 
-    # Phase 1: Discover Python environments
-    print_phase_header(1, "Discovering Python environments...")
-    envs = find_python_envs(policy)
-    print(f"  Found {BOLD}{len(envs)}{RESET} unique Python interpreters")
+    # Phase 1: Discover litellm installations
+    print_phase_header(1, "Discovering litellm installations...")
+    metadata_dirs = find_litellm_metadata(policy)
+    print(f"  Found {BOLD}{len(metadata_dirs)}{RESET} litellm metadata directories")
 
     # Phase 2: Check litellm versions
     print_separator()
-    print_phase_header(2, "Checking litellm versions in all environments...")
-    scan_environments(envs, results)
+    print_phase_header(2, "Checking litellm versions from metadata...")
+    scan_environments(metadata_dirs, results)
 
     # Phase 3: IOC artifact scan
     print_phase_header(3, "Scanning for IOC artifacts...")

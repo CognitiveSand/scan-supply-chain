@@ -7,9 +7,9 @@ from .config import COMPROMISED_VERSIONS
 
 @dataclass(frozen=True)
 class Installation:
-    """A litellm installation found in a Python environment."""
+    """A litellm installation found via filesystem metadata."""
 
-    python_path: str
+    env_path: str
     version: str
 
     @property
