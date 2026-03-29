@@ -183,6 +183,7 @@ class TestScanForC2Connections:
 
     def _stub_ss(self, monkeypatch, stdout):
         """Helper: stub shutil.which and subprocess.run for ss command."""
+        stdout_bytes = stdout.encode() if isinstance(stdout, str) else stdout
         monkeypatch.setattr(
             "scan_litellm_compromise.ioc_scanner.shutil.which",
             lambda cmd: "/usr/bin/ss",
@@ -190,7 +191,7 @@ class TestScanForC2Connections:
         monkeypatch.setattr(
             "scan_litellm_compromise.ioc_scanner.subprocess.run",
             lambda *a, **kw: subprocess.CompletedProcess(
-                args=a[0], returncode=0, stdout=stdout,
+                args=a[0], returncode=0, stdout=stdout_bytes,
             ),
         )
 

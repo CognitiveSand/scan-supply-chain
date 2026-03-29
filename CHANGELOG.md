@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2 — 2026-03-29
+
+### Fixed
+- Fix crash on Windows when `netstat -ano` output contains bytes not decodable by `cp1252`. Now decodes raw bytes with `errors="replace"` instead of relying on `text=True`.
+
 ## 0.3.1 — 2026-03-29
 
 ### Fixed

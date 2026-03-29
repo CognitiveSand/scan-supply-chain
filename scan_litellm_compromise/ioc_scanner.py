@@ -121,8 +121,8 @@ def _scan_for_c2_connections(
     domain_ips = _resolve_c2_ips(resolve_c2)
     try:
         socket_output = subprocess.run(
-            command, capture_output=True, text=True, timeout=5
-        ).stdout
+            command, capture_output=True, timeout=5
+        ).stdout.decode(errors="replace")
 
         for domain, ips in domain_ips.items():
             for ip in ips:
