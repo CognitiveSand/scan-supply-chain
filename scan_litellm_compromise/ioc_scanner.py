@@ -10,11 +10,12 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterable
 
-from .config import C2_DOMAINS
+from .config import C2_DOMAINS, C2_KNOWN_IPS
 from .formatting import (
     BOLD,
     RED,
     RESET,
+    YELLOW,
     print_check_header,
     print_clean,
     print_ioc_found,
@@ -86,34 +87,53 @@ def _scan_for_exfiltration_artifacts(
     _check_known_paths(policy.tmp_description, tmp_paths, results)
 
 
+def _resolve_c2_ips(resolve_dns: bool) -> dict[str, list[str]]:
+    """Build domain -> IPs mapping. Uses known IPs; optionally adds live DNS."""
+    result: dict[str, list[str]] = {d: list(ips) for d, ips in C2_KNOWN_IPS.items()}
+    if resolve_dns:
+        for domain in C2_DOMAINS:
+            try:
+                live_ip = socket.gethostbyname(domain)
+                ips = result.setdefault(domain, [])
+                if live_ip not in ips:
+                    ips.append(live_ip)
+            except socket.gaierror:
+                logger.debug("Cannot resolve C2 domain %s", domain)
+    return result
+
+
 def _scan_for_c2_connections(
-    results: ScanResults, policy: PlatformPolicy
+    results: ScanResults, policy: PlatformPolicy, resolve_c2: bool = False
 ) -> None:
     """Check active network connections for C2 domain communication."""
     print_check_header("active network connections for C2 domains")
+    if resolve_c2:
+        print(
+            f"  {YELLOW}{BOLD}NOTE:{RESET} --resolve-c2 enabled "
+            f"-- making live DNS queries to C2 domains"
+        )
     command = policy.network_check_command
     if command is None or not shutil.which(command[0]):
         print_clean(f"{command[0] if command else 'network tool'} not available, skipping")
         return
 
     found = False
+    domain_ips = _resolve_c2_ips(resolve_c2)
     try:
         socket_output = subprocess.run(
             command, capture_output=True, text=True, timeout=5
         ).stdout
 
-        for domain in C2_DOMAINS:
-            try:
-                resolved_ip = socket.gethostbyname(domain)
-                if resolved_ip in socket_output:
+        for domain, ips in domain_ips.items():
+            for ip in ips:
+                if ip in socket_output:
                     print(
                         f"  {RED}{BOLD}! ACTIVE CONNECTION "
-                        f"to {domain} ({resolved_ip}){RESET}"
+                        f"to {domain} ({ip}){RESET}"
                     )
-                    results.iocs.append(f"connection:{domain}:{resolved_ip}")
+                    results.iocs.append(f"connection:{domain}:{ip}")
                     found = True
-            except socket.gaierror:
-                logger.debug("Cannot resolve C2 domain %s", domain)
+                    break  # one match per domain is enough
     except (subprocess.TimeoutExpired, OSError):
         logger.debug("Failed to run network check command")
 
@@ -155,7 +175,9 @@ def _scan_for_malicious_pods(results: ScanResults) -> None:
 # ── Public entry point ───────────────────────────────────────────────────
 
 
-def scan_iocs(results: ScanResults, policy: PlatformPolicy) -> None:
+def scan_iocs(
+    results: ScanResults, policy: PlatformPolicy, resolve_c2: bool = False
+) -> None:
     """Run all IOC artifact scans."""
     _scan_for_backdoor_pth(results, policy)
     print()
@@ -163,6 +185,6 @@ def scan_iocs(results: ScanResults, policy: PlatformPolicy) -> None:
     print()
     _scan_for_exfiltration_artifacts(results, policy)
     print()
-    _scan_for_c2_connections(results, policy)
+    _scan_for_c2_connections(results, policy, resolve_c2=resolve_c2)
     _scan_for_malicious_pods(results)
     policy.extra_ioc_checks(results)

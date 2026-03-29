@@ -31,6 +31,34 @@ py run_scan.py
 
 No dependencies required — uses only the Python standard library.
 
+### Command-Line Options
+
+| Flag | Description |
+|------|-------------|
+| `--scan-path DIR` | Restrict Phase 1 (discovery) and Phase 4 (source scan) to a specific directory instead of scanning the entire system. IOC artifact checks (Phase 3) still run system-wide. |
+| `--resolve-c2` | Enable live DNS queries to C2 domains in addition to using hardcoded known IPs. See warning below. |
+| `--help` | Show usage information. |
+
+> **Warning about `--resolve-c2`:** This flag causes the scanner to make live DNS queries to `models.litellm.cloud` and `checkmarx.zone` — both **attacker-controlled domains**. This carries real risks:
+> - **Operational security:** Your DNS query is visible to the attacker's infrastructure, revealing that you are actively investigating the compromise. This could prompt them to rotate infrastructure, wipe logs, or accelerate exploitation of already-stolen credentials.
+> - **Network monitoring:** The queries may trigger alerts in your own SIEM, IDS, or SOC dashboards, creating noise during an active incident response.
+> - **DNS logging:** Corporate DNS resolvers and upstream providers log queries. The domains may already be on threat intel blocklists, which could flag your machine as compromised.
+>
+> **In most cases you do not need this flag.** The scanner ships hardcoded known IPs (`46.151.182.203`, `83.142.209.11`) confirmed by multiple threat intelligence sources. Live DNS is only useful if you suspect the attacker has rotated to new infrastructure since this tool was last updated.
+
+**Examples:**
+
+```bash
+# Scan only a specific project directory
+python3 -m scan_litellm_compromise --scan-path /home/user/myproject
+
+# Enable live DNS resolution for C2 connection checks
+python3 -m scan_litellm_compromise --resolve-c2
+
+# Combine both
+python3 -m scan_litellm_compromise --scan-path ./myproject --resolve-c2
+```
+
 ## Video Overview
 
 This scanner was inspired by [Fahd Mirza's video](https://www.youtube.com/watch?v=YoClPk7KqZc) highlighting the incident — thanks to him for bringing it to attention.
@@ -77,13 +105,13 @@ If a Kubernetes service account token is found, the payload deploys **privileged
 
 ## What This Scanner Attempts to Find
 
-This scanner makes a best-effort attempt to detect known IOCs. It automatically detects the platform (Linux or Windows) and adjusts scan paths accordingly.
+This scanner makes a best-effort attempt to detect known IOCs. It automatically detects the platform (Linux, macOS, or Windows) and adjusts scan paths accordingly.
 
 | Phase | What It Looks For |
 |-------|-------------------|
-| 1 | litellm metadata directories (`dist-info` / `egg-info`) across filesystem (Linux: `/home`, `/opt`, `/usr`, `/srv`, `/var`; Windows: `%USERPROFILE%`, `%APPDATA%`, `Program Files`) |
+| 1 | litellm metadata directories (`dist-info` / `egg-info`) across filesystem (Linux: `/home`, `/opt`, `/usr`, `/srv`, `/var`; macOS: `/Users`, `/opt/homebrew`, `/Library`; Windows: `%USERPROFILE%`, `%APPDATA%`, `Program Files`). Can be restricted with `--scan-path`. |
 | 2 | litellm version from metadata files — no Python interpreter execution needed |
-| 3 | IOC artifacts: `litellm_init.pth`, sysmon persistence, temp staging files, C2 network connections, suspicious Kubernetes pods. On Windows: also checks Registry Run keys and Scheduled Tasks |
+| 3 | IOC artifacts: `litellm_init.pth`, sysmon persistence, temp staging files, C2 network connections (matched against hardcoded known IPs by default; `--resolve-c2` enables live DNS), suspicious Kubernetes pods. On Windows: also checks Registry Run keys and Scheduled Tasks |
 | 4 | Source files and dependency configs (pyproject.toml, requirements.txt, etc.) that reference litellm, flagging any pinned to compromised versions |
 
 ## Limitations
@@ -101,6 +129,10 @@ This scanner makes a best-effort attempt to detect known IOCs. It automatically 
 
 ```bash
 python3 run_scan.py
+# or
+python3 -m scan_litellm_compromise
+# or, if installed via pip:
+scan-litellm
 ```
 
 **Windows — double-click `run_scan.bat`**, or from a terminal:
@@ -109,20 +141,27 @@ python3 run_scan.py
 py run_scan.py
 ```
 
-The scanner auto-detects the platform and adjusts scan paths, network commands, and persistence checks accordingly.
+The scanner auto-detects the platform (Linux, macOS, or Windows) and adjusts scan paths, network commands, and persistence checks accordingly.
 
 Exit code is `1` if compromise indicators are found, `0` otherwise.
 
+See [Command-Line Options](#command-line-options) for `--scan-path` and `--resolve-c2`.
+
 ## Platform Support
 
-| Feature | Linux | Windows 10/11 |
-|---------|-------|---------------|
-| litellm detection | Scans `dist-info` / `egg-info` metadata in `/home`, `/opt`, `/usr`, `/srv`, `/var` | Scans metadata in `%USERPROFILE%`, `%APPDATA%`, `Program Files` |
-| Conda/pipx detection | `/opt/conda`, `~/.local/share/pipx` | `%LOCALAPPDATA%\Miniconda3`, `%LOCALAPPDATA%\pipx` |
-| Persistence check | systemd user services | Registry Run keys, Scheduled Tasks, Startup folder |
-| Temp artifacts | `/tmp/` | `%TEMP%` |
-| Network connections | `ss -tnp` | `netstat -ano` |
-| ANSI terminal colors | Native | Auto-enabled via Virtual Terminal Processing |
+| Feature | Linux | macOS | Windows 10/11 |
+|---------|-------|-------|---------------|
+| litellm detection | `/home`, `/opt`, `/usr`, `/srv`, `/var` | `/Users`, `/opt/homebrew`, `/usr/local`, `/Library` | `%USERPROFILE%`, `%APPDATA%`, `Program Files` |
+| Conda/pipx detection | `/opt/conda`, `~/.local/share/pipx` | Homebrew Caskroom, `~/.local/share/pipx` | `%LOCALAPPDATA%\Miniconda3`, `%LOCALAPPDATA%\pipx` |
+| Persistence check | systemd user services | sysmon files (inert without systemd) | Registry Run keys, Scheduled Tasks, Startup folder |
+| Temp artifacts | `/tmp/` | `/tmp/` | `%TEMP%` |
+| Network connections | `ss -tnp` | `lsof -i -P -n` | `netstat -ano` |
+| C2 IP matching | Hardcoded known IPs (opt-in live DNS via `--resolve-c2`) | Same | Same |
+| ANSI terminal colors | Native | Native | Auto-enabled via Virtual Terminal Processing |
+
+### macOS Note
+
+macOS support was added based on threat intelligence analysis of the TeamPCP malware's behavior on Darwin systems. **It has not been tested on actual macOS hardware** as the maintainer does not currently have access to a Mac. The malware's credential theft and `.pth` backdoor are confirmed to work on macOS, but the systemd persistence mechanism is inert (macOS uses launchd, not systemd). If you run this scanner on macOS and encounter issues, please open an issue.
 
 ## If Compromise Is Detected
 
@@ -167,21 +206,23 @@ Exit code is `1` if compromise indicators are found, `0` otherwise.
 ```
 scan_litellm_compromise/
   __main__.py            Entry point for python -m
-  scanner.py             Orchestrator
-  config.py              Cross-platform constants and patterns
+  scanner.py             Orchestrator (argparse CLI)
+  config.py              Cross-platform constants, patterns, and known C2 IPs
   models.py              Typed data structures
   formatting.py          Terminal output (ANSI with Windows support)
   platform_policy.py     Platform abstraction (Strategy pattern)
   platform_linux.py      Linux-specific paths and commands
+  platform_darwin.py     macOS-specific paths and commands
   platform_windows.py    Windows-specific paths and commands
   ioc_windows.py         Windows-only IOC checks (Registry, Tasks)
   discovery.py           Phase 1 — find litellm metadata directories
   version_checker.py     Phase 2 — read litellm version from metadata
-  run_scan.bat           Double-click launcher for Windows
   ioc_scanner.py         Phase 3 — IOC artifact detection
   source_scanner.py      Phase 4 — source/config file scanning
   report.py              Phase 5 — summary and remediation
+tests/                   pytest test suite (299 tests)
 run_scan.py              Direct entry point
+run_scan.bat             Double-click launcher for Windows
 ```
 
 ## Disclaimer

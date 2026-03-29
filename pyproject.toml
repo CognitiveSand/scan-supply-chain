@@ -1,10 +1,16 @@
 [project]
 name = "scan-litellm-compromise"
-version = "0.2.2"
+version = "0.3.0"
 description = "Best-effort scanner to detect IOCs from the compromised LiteLLM PyPI packages v1.82.7/v1.82.8 (TeamPCP, March 2026)"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 
+[project.optional-dependencies]
+test = ["pytest"]
+
 [project.scripts]
 scan-litellm = "scan_litellm_compromise.scanner:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

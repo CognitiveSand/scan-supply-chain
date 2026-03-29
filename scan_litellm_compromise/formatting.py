@@ -45,9 +45,9 @@ RESET = _code("\033[0m")
 def print_banner():
     print(f"{CYAN}{BOLD}")
     print("+" + "=" * 63 + "+")
-    print("|   LiteLLM Supply Chain Attack Scanner (Python)              |")
-    print("|   Compromised versions: v1.82.7, v1.82.8                    |")
-    print("|   Campaign: TeamPCP -- March 24, 2026                       |")
+    print("|   LiteLLM Supply Chain Attack Scanner (Python)               |")
+    print("|   Compromised versions: v1.82.7, v1.82.8                     |")
+    print("|   Campaign: TeamPCP -- March 24, 2026                        |")
     print("+" + "=" * 63 + "+")
     print(RESET)
 

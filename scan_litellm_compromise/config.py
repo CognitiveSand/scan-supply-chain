@@ -10,6 +10,13 @@ COMPROMISED_VERSIONS = frozenset({"1.82.7", "1.82.8"})
 
 C2_DOMAINS = ["models.litellm.cloud", "checkmarx.zone"]
 
+# Known IPs for C2 domains (avoids DNS queries to attacker-controlled domains).
+# Source: hunt.io, Datadog Security Labs, Sysdig — AS205759 / Ghosty Networks LLC.
+C2_KNOWN_IPS: dict[str, list[str]] = {
+    "models.litellm.cloud": ["46.151.182.203"],
+    "checkmarx.zone": ["83.142.209.11"],
+}
+
 # Directories always skipped during any filesystem walk
 _COMMON_SKIP_DIRS = frozenset({
     "__pycache__",

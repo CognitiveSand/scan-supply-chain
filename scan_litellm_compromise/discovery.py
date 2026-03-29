@@ -72,9 +72,14 @@ def _deduplicate_by_realpath(paths: list[Path]) -> list[Path]:
     return unique
 
 
-def find_litellm_metadata(policy: PlatformPolicy) -> list[Path]:
+def find_litellm_metadata(
+    policy: PlatformPolicy, scan_path: str | None = None
+) -> list[Path]:
     """Find all litellm dist-info/egg-info directories on the system."""
-    roots = _build_search_roots(policy)
+    if scan_path is not None:
+        roots = [scan_path]
+    else:
+        roots = _build_search_roots(policy)
     found: list[Path] = []
 
     for root in roots:

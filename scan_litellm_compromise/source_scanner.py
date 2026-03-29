@@ -124,12 +124,17 @@ def _scan_file_lines(
 # ── Public entry point ───────────────────────────────────────────────────
 
 
-def scan_source_and_configs(results: ScanResults, policy: PlatformPolicy) -> int:
+def scan_source_and_configs(
+    results: ScanResults, policy: PlatformPolicy, scan_path: str | None = None
+) -> int:
     """Scan source and config files for litellm usage.
 
     Returns the number of files scanned.
     """
-    scan_roots = _build_scan_roots(policy)
+    if scan_path is not None:
+        scan_roots = [scan_path]
+    else:
+        scan_roots = _build_scan_roots(policy)
     scanner_dir = str(Path(__file__).resolve().parent)
     seen_files: set[str] = set()
     files_scanned = 0
