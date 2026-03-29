@@ -8,11 +8,11 @@ A best-effort scanner that **attempts to detect** indicators of compromise (IOCs
 
 ### Option A: Install from PyPI
 
+**Linux / macOS:**
+
 ```bash
 # Recommended — installs in an isolated environment
 pipx install scan-litellm-compromise
-
-# Then run:
 scan-litellm
 ```
 
@@ -27,7 +27,23 @@ python3 -m venv /tmp/scanner && /tmp/scanner/bin/pip install scan-litellm-compro
 
 > **Note:** `pip install` directly will fail on modern Linux distributions (Debian 12+, Ubuntu 23.04+, Fedora 38+) due to [PEP 668](https://peps.python.org/pep-0668/). Use `pipx` or a virtual environment instead.
 
+**Windows:**
+
+```cmd
+pip install scan-litellm-compromise
+scan-litellm
+```
+
+Or using a virtual environment:
+
+```cmd
+py -m venv %TEMP%\scanner && %TEMP%\scanner\Scripts\pip install scan-litellm-compromise
+%TEMP%\scanner\Scripts\scan-litellm
+```
+
 ### Option B: Run from source (no install needed)
+
+**Linux / macOS:**
 
 ```bash
 git clone https://github.com/CognitiveSand/scan_litellm_compromise.git
@@ -35,9 +51,11 @@ cd scan_litellm_compromise
 python3 run_scan.py
 ```
 
-On **Windows** — double-click **`run_scan.bat`**, or from a terminal:
+**Windows** — double-click **`run_scan.bat`**, or from a terminal:
 
 ```cmd
+git clone https://github.com/CognitiveSand/scan_litellm_compromise.git
+cd scan_litellm_compromise
 py run_scan.py
 ```
 
