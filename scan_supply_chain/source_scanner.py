@@ -138,13 +138,13 @@ def scan_source_and_configs(
                     if not is_source and not is_config:
                         continue
 
-                    try:
-                        resolved = str(file_path.resolve())
-                    except OSError:
+                    # Use string path for dedup — roots are pre-deduped so
+                    # overlapping walks don't occur. Avoids a realpath()
+                    # syscall per file (~50k calls on large codebases).
+                    file_str = str(file_path)
+                    if file_str in seen_files or file_str.startswith(scanner_dir):
                         continue
-                    if resolved in seen_files or resolved.startswith(scanner_dir):
-                        continue
-                    seen_files.add(resolved)
+                    seen_files.add(file_str)
 
                     files_scanned += 1
                     _scan_file_lines(

@@ -81,9 +81,7 @@ def _scan_walk_files(
                 continue
             try:
                 for dirpath, dirnames, filenames in os.walk(root_path):
-                    dirnames[:] = [
-                        d for d in dirnames if d not in IOC_WALK_SKIP_DIRS
-                    ]
+                    dirnames[:] = [d for d in dirnames if d not in IOC_WALK_SKIP_DIRS]
                     for fn in filenames:
                         if fn not in target_names:
                             continue
