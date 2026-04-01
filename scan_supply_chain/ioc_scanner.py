@@ -131,13 +131,6 @@ def _resolve_c2_ips(threat: ThreatProfile, resolve_dns: bool) -> dict[str, list[
     return result
 
 
-def _ip_matches_output(ip: str, ports: list[int], output: str) -> bool:
-    """Check if an IP (optionally with specific ports) appears in socket output."""
-    if not ports:
-        return ip in output
-    return any(f"{ip}:{port}" in output for port in ports)
-
-
 def _scan_for_c2_connections(
     results: ScanResults,
     threat: ThreatProfile,
@@ -145,6 +138,14 @@ def _scan_for_c2_connections(
     resolve_c2: bool = False,
 ) -> None:
     """Check active network connections for C2 domain communication."""
+    from .models import Finding, FindingCategory
+    from .network_scanner import (
+        enrich_from_proc,
+        find_c2_connections,
+        parse_lsof_output,
+        parse_ss_output,
+    )
+
     if not threat.c2.domains and not threat.c2.ips:
         return
 
@@ -163,23 +164,38 @@ def _scan_for_c2_connections(
 
     found = False
     domain_ips = _resolve_c2_ips(threat, resolve_c2)
-    c2_ports = threat.c2.ports
     try:
-        socket_output = subprocess.run(
+        raw_output = subprocess.run(
             command, capture_output=True, timeout=5
         ).stdout.decode(errors="replace")
 
-        for domain, ips in domain_ips.items():
-            for ip in ips:
-                if _ip_matches_output(ip, c2_ports, socket_output):
-                    port_info = f" port {c2_ports}" if c2_ports else ""
-                    print(
-                        f"  {RED}{BOLD}! ACTIVE CONNECTION "
-                        f"to {domain} ({ip}{port_info}){RESET}"
-                    )
-                    results.iocs.append(f"connection:{domain}:{ip}")
-                    found = True
-                    break  # one match per domain is enough
+        # Parse into structured records
+        if command[0] == "lsof":
+            records = parse_lsof_output(raw_output)
+        else:
+            records = parse_ss_output(raw_output)
+
+        matches = find_c2_connections(records, domain_ips, threat.c2.ports)
+        for record, domain in matches:
+            record = enrich_from_proc(record)
+            proc = record.process_name or "unknown"
+            pid_str = f" (PID {record.pid})" if record.pid else ""
+            exe_str = f" [{record.exe_path}]" if record.exe_path else ""
+            desc = (
+                f"{proc}{pid_str}{exe_str} -> "
+                f"{domain} ({record.peer_ip}:{record.peer_port})"
+            )
+            print(f"  {RED}{BOLD}! ACTIVE CONNECTION: {desc}{RESET}")
+            results.iocs.append(f"connection:{domain}:{record.peer_ip}")
+            results.findings.append(
+                Finding(
+                    category=FindingCategory.C2_CONNECTION,
+                    description=desc,
+                    evidence=f"{record.peer_ip}:{record.peer_port}",
+                    weight=4,
+                )
+            )
+            found = True
     except (subprocess.TimeoutExpired, OSError):
         logger.debug("Failed to run network check command")
 
