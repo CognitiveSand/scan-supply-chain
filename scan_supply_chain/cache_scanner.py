@@ -7,8 +7,8 @@ import os
 import sys
 from pathlib import Path
 
-from .formatting import print_check_header, print_clean, print_ioc_found
-from .models import Finding, FindingCategory, ScanResults
+from .formatting import print_check_header, print_clean
+from .models import FindingCategory, ScanResults
 
 logger = logging.getLogger(__name__)
 
@@ -29,16 +29,7 @@ def scan_caches(results: ScanResults, package: str, ecosystem: str) -> None:
 
 
 def _add_cache_finding(results: ScanResults, description: str, evidence: str) -> None:
-    print_ioc_found(description)
-    results.iocs.append(f"cache:{description}")
-    results.findings.append(
-        Finding(
-            category=FindingCategory.CACHE_TRACE,
-            description=description,
-            evidence=evidence,
-            weight=1,
-        )
-    )
+    results.add_finding(FindingCategory.CACHE_TRACE, description, evidence, 1)
 
 
 def _pip_cache_dir() -> Path:

@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from .formatting import print_check_header, print_clean, print_ioc_found
-from .models import Finding, FindingCategory, ScanResults
+from .formatting import print_check_header, print_clean
+from .models import FindingCategory, ScanResults
 
 logger = logging.getLogger(__name__)
 
@@ -50,13 +50,4 @@ def _scan_history_file(
             continue
         if any(cmd in stripped for cmd in install_cmds):
             description = f"{path.name}: {stripped[:120]}"
-            print_ioc_found(description)
-            results.iocs.append(f"history:{description}")
-            results.findings.append(
-                Finding(
-                    category=FindingCategory.HISTORY,
-                    description=description,
-                    evidence=str(path),
-                    weight=1,
-                )
-            )
+            results.add_finding(FindingCategory.HISTORY, description, str(path), 1)

@@ -75,6 +75,20 @@ class ScanResults:
     config_refs: list[ConfigReference] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)
 
+    def add_finding(
+        self,
+        category: FindingCategory,
+        description: str,
+        evidence: str,
+        weight: int,
+    ) -> None:
+        """Record a finding: print, append to iocs, append to findings."""
+        from .formatting import print_ioc_found
+
+        print_ioc_found(description)
+        self.iocs.append(f"{category.value}:{description}")
+        self.findings.append(Finding(category, description, evidence, weight))
+
     @property
     def compromised_installations(self) -> list[Installation]:
         return [i for i in self.installations if i.version in self.compromised_versions]

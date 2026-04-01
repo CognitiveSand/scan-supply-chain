@@ -13,8 +13,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .formatting import print_check_header, print_clean, print_ioc_found
-from .models import Finding, FindingCategory, ScanResults
+from .formatting import print_check_header, print_clean
+from .models import FindingCategory, ScanResults
 
 logger = logging.getLogger(__name__)
 
@@ -60,16 +60,7 @@ def scan_persistence(results: ScanResults, package: str) -> None:
 
 
 def _add_persistence(results: ScanResults, description: str, evidence: str) -> None:
-    print_ioc_found(description)
-    results.iocs.append(f"persistence:{description}")
-    results.findings.append(
-        Finding(
-            category=FindingCategory.PERSISTENCE,
-            description=description,
-            evidence=evidence,
-            weight=2,
-        )
-    )
+    results.add_finding(FindingCategory.PERSISTENCE, description, evidence, 2)
 
 
 def _check_config_dir(
