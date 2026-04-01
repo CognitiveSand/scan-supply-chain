@@ -1,16 +1,19 @@
 [project]
 name = "scan-litellm-compromise"
-version = "0.3.2"
-description = "Best-effort scanner to detect IOCs from the compromised LiteLLM PyPI packages v1.82.7/v1.82.8 (TeamPCP, March 2026)"
+version = "0.4.0"
+description = "Supply chain compromise scanner — detects known PyPI and npm attacks via data-driven threat profiles"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 
 [project.optional-dependencies]
 test = ["pytest"]
 
 [project.scripts]
 scan-litellm = "scan_litellm_compromise.scanner:main"
+
+[tool.setuptools.package-data]
+scan_litellm_compromise = ["threats/*.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

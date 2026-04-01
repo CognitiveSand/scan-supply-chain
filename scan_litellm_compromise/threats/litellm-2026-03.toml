@@ -1,0 +1,88 @@
+[threat]
+id          = "litellm-2026-03"
+name        = "LiteLLM PyPI Supply Chain Attack (TeamPCP)"
+date        = "2026-03-24"
+ecosystem   = "pypi"
+package     = "litellm"
+compromised = ["1.82.7", "1.82.8"]
+safe        = "1.82.6"
+advisory    = "https://github.com/BerriAI/litellm/issues/24512"
+description = """\
+Backdoored versions published via stolen PyPI token from compromised \
+trivy-action GitHub Action.  Stage 1 harvests credentials (SSH, cloud, \
+API keys); Stage 2 exfiltrates via AES-256 + RSA-4096 to C2; Stage 3 \
+installs persistent backdoor polling for secondary payloads."""
+
+# ── C2 Infrastructure ───────────────────────────────────────────
+[c2]
+domains = ["models.litellm.cloud", "checkmarx.zone"]
+ports   = []
+
+[c2.ips]
+"models.litellm.cloud" = ["46.151.182.203"]
+"checkmarx.zone"       = ["83.142.209.11"]
+
+# ── IOC: Files to walk-search across filesystem ─────────────────
+[[ioc.walk_files]]
+description = "litellm_init.pth (auto-exec backdoor)"
+filenames   = ["litellm_init.pth"]
+sha256      = ["71e35aef03099cd1f2d6446734273025a163597de93912df321ef118bf135238"]
+
+# ── IOC: Known paths (per-platform) ─────────────────────────────
+[[ioc.known_paths]]
+description = "sysmon persistence"
+linux       = ["~/.config/sysmon/sysmon.py",
+               "~/.config/systemd/user/sysmon.service"]
+darwin      = ["~/.config/sysmon/sysmon.py",
+               "~/.config/systemd/user/sysmon.service"]
+windows     = ['%APPDATA%\sysmon\sysmon.py',
+               '%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\sysmon.py',
+               '%LOCALAPPDATA%\sysmon\sysmon.py',
+               '%TEMP%\sysmon.py']
+
+[[ioc.known_paths]]
+description = "exfiltration artifacts"
+linux       = ["/tmp/pglog", "/tmp/.pg_state", "/tmp/tpcp.tar.gz"]
+darwin      = ["/tmp/pglog", "/tmp/.pg_state", "/tmp/tpcp.tar.gz"]
+windows     = ['%TEMP%\pglog', '%TEMP%\.pg_state', '%TEMP%\tpcp.tar.gz']
+
+# ── IOC: Phantom dependencies ───────────────────────────────────
+[ioc.phantom_deps]
+names = []
+
+# ── IOC: Kubernetes ──────────────────────────────────────────────
+[ioc.kubernetes]
+pod_patterns = ["node-setup-"]
+namespace    = "kube-system"
+
+# ── IOC: Windows-specific ────────────────────────────────────────
+[ioc.windows]
+registry_keywords = ["sysmon", "litellm", "system telemetry"]
+schtask_keywords  = ["sysmon", "litellm", "system telemetry"]
+
+# ── Remediation ──────────────────────────────────────────────────
+[remediation]
+rotate_secrets  = true
+install_command = "pip install litellm==1.82.6"
+
+[remediation.remove_artifacts]
+linux   = ["Delete any litellm_init.pth files from site-packages/",
+           "Remove ~/.config/sysmon/ and sysmon.service",
+           "Remove /tmp/pglog, /tmp/.pg_state, /tmp/tpcp.tar.gz"]
+darwin  = ["Delete any litellm_init.pth files from site-packages/",
+           "Remove ~/.config/sysmon/ if present",
+           "Remove /tmp/pglog, /tmp/.pg_state, /tmp/tpcp.tar.gz"]
+windows = ["Delete any litellm_init.pth files from site-packages/",
+           "Remove sysmon.py from %APPDATA%, %LOCALAPPDATA%, and Startup folder",
+           "Remove pglog, .pg_state, tpcp.tar.gz from %TEMP%"]
+
+[remediation.check_persistence]
+linux   = ["systemctl --user list-units | grep sysmon",
+           "systemctl list-units | grep sysmon"]
+darwin  = ["ls -la ~/.config/sysmon/",
+           "launchctl list | grep sysmon"]
+windows = ["schtasks /query | findstr sysmon",
+           'Check Startup folder: %APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\\',
+           'reg query HKCU\Software\Microsoft\Windows\CurrentVersion\Run',
+           'reg query HKLM\Software\Microsoft\Windows\CurrentVersion\Run',
+           'Check %APPDATA%\sysmon\ and %LOCALAPPDATA%\sysmon\\']

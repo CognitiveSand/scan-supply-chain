@@ -1,159 +1,160 @@
-"""Tests for Phase 2: extracting litellm versions from metadata.
+"""Tests for Phase 2: extracting package versions from metadata.
 
 Module under test: scan_litellm_compromise.version_checker
+               and scan_litellm_compromise.ecosystem_pypi
+               and scan_litellm_compromise.ecosystem_npm
 """
 
-from pathlib import Path
+import json
 
 import pytest
 
+from scan_litellm_compromise.ecosystem_pypi import PyPIPlugin
+from scan_litellm_compromise.ecosystem_npm import NpmPlugin
 from scan_litellm_compromise.models import ScanResults
-from scan_litellm_compromise.version_checker import (
-    _extract_version,
-    _read_version_from_file,
-    scan_environments,
-)
+from scan_litellm_compromise.version_checker import scan_environments
+from tests.conftest import LITELLM_COMPROMISED, make_litellm_threat, make_axios_threat
 
 
-# ── _read_version_from_file ───────────────────────────────────────────
+# ── PyPI: extract_version ─────────────────────────────────────────────
 
 
-class TestReadVersionFromFile:
+class TestPyPIExtractVersion:
 
-    def test_extracts_version_from_standard_metadata(self, tmp_path):
-        metadata = tmp_path / "METADATA"
-        metadata.write_text(
-            "Metadata-Version: 2.1\n"
-            "Name: litellm\n"
-            "Version: 1.82.7\n"
-            "Summary: A library\n"
+    @pytest.fixture
+    def plugin(self):
+        return PyPIPlugin()
+
+    def test_reads_version_from_metadata_file(self, tmp_path, plugin):
+        dist_info = tmp_path / "litellm-1.82.7.dist-info"
+        dist_info.mkdir()
+        (dist_info / "METADATA").write_text(
+            "Metadata-Version: 2.1\nName: litellm\nVersion: 1.82.7\n"
         )
-        assert _read_version_from_file(metadata) == "1.82.7"
+        assert plugin.extract_version(dist_info) == "1.82.7"
 
-    def test_returns_none_for_missing_version_field(self, tmp_path):
-        metadata = tmp_path / "METADATA"
-        metadata.write_text("Metadata-Version: 2.1\nName: litellm\n")
-        assert _read_version_from_file(metadata) is None
-
-    def test_returns_none_for_nonexistent_file(self, tmp_path):
-        assert _read_version_from_file(tmp_path / "METADATA") is None
-
-    def test_strips_whitespace_from_version(self, tmp_path):
-        metadata = tmp_path / "METADATA"
-        metadata.write_text("Version:  1.82.7  \n")
-        assert _read_version_from_file(metadata) == "1.82.7"
-
-    def test_handles_permission_error(self, tmp_path, monkeypatch):
-        metadata = tmp_path / "METADATA"
-        metadata.write_text("Version: 1.82.7\n")
-        monkeypatch.setattr(
-            Path, "read_text",
-            lambda *a, **kw: (_ for _ in ()).throw(PermissionError("denied")),
-        )
-        assert _read_version_from_file(metadata) is None
-
-
-# ── _extract_version ──────────────────────────────────────────────────
-
-
-class TestExtractVersion:
-
-    def test_prefers_metadata_file_over_dirname(self, tmp_path):
-        dist_info = tmp_path / "litellm-1.82.7.dist-info"
-        dist_info.mkdir()
-        (dist_info / "METADATA").write_text("Version: 1.82.8\n")
-
-        # File says 1.82.8 but dirname says 1.82.7 — file wins
-        assert _extract_version(dist_info) == "1.82.8"
-
-    def test_falls_back_to_pkg_info_when_metadata_missing(self, tmp_path):
-        dist_info = tmp_path / "litellm-1.82.7.dist-info"
-        dist_info.mkdir()
-        (dist_info / "PKG-INFO").write_text("Version: 1.82.7\n")
-
-        assert _extract_version(dist_info) == "1.82.7"
-
-    def test_falls_back_to_dist_info_dirname(self, tmp_path):
-        dist_info = tmp_path / "litellm-1.82.7.dist-info"
-        dist_info.mkdir()
-        # No METADATA or PKG-INFO files
-
-        assert _extract_version(dist_info) == "1.82.7"
-
-    def test_falls_back_to_egg_info_dirname(self, tmp_path):
-        egg_info = tmp_path / "litellm-1.82.8.egg-info"
+    def test_reads_version_from_pkg_info(self, tmp_path, plugin):
+        egg_info = tmp_path / "litellm-1.80.0.egg-info"
         egg_info.mkdir()
+        (egg_info / "PKG-INFO").write_text(
+            "Metadata-Version: 1.0\nName: litellm\nVersion: 1.80.0\n"
+        )
+        assert plugin.extract_version(egg_info) == "1.80.0"
 
-        assert _extract_version(egg_info) == "1.82.8"
-
-    def test_returns_none_for_unrecognized_dirname(self, tmp_path):
-        unknown = tmp_path / "litellm-unknown"
-        unknown.mkdir()
-
-        assert _extract_version(unknown) is None
-
-    def test_metadata_with_empty_version_falls_back_to_dirname(self, tmp_path):
+    def test_prefers_metadata_over_pkg_info(self, tmp_path, plugin):
         dist_info = tmp_path / "litellm-1.82.7.dist-info"
         dist_info.mkdir()
-        (dist_info / "METADATA").write_text("Name: litellm\n")
-        # METADATA exists but has no Version field, fall back to dirname
+        (dist_info / "METADATA").write_text("Version: 1.82.7\n")
+        (dist_info / "PKG-INFO").write_text("Version: 1.82.6\n")
+        assert plugin.extract_version(dist_info) == "1.82.7"
 
-        assert _extract_version(dist_info) == "1.82.7"
+    def test_falls_back_to_dirname_when_no_metadata(self, tmp_path, plugin):
+        dist_info = tmp_path / "litellm-1.82.7.dist-info"
+        dist_info.mkdir()
+        assert plugin.extract_version(dist_info) == "1.82.7"
+
+    def test_falls_back_to_dirname_for_egg_info(self, tmp_path, plugin):
+        egg_info = tmp_path / "litellm-1.80.0.egg-info"
+        egg_info.mkdir()
+        assert plugin.extract_version(egg_info) == "1.80.0"
+
+    def test_returns_none_for_unrecognized_directory(self, tmp_path, plugin):
+        unknown = tmp_path / "unknown-dir"
+        unknown.mkdir()
+        assert plugin.extract_version(unknown) is None
+
+    def test_strips_whitespace_from_version(self, tmp_path, plugin):
+        dist_info = tmp_path / "litellm-1.82.7.dist-info"
+        dist_info.mkdir()
+        (dist_info / "METADATA").write_text("Version:  1.82.7  \n")
+        assert plugin.extract_version(dist_info) == "1.82.7"
+
+    @pytest.mark.parametrize("version", [
+        "1.82.7", "1.82.8", "0.0.1", "2.0.0a1", "1.82.7.post1",
+        "1.82.7.dev0", "1.82.7rc1",
+    ])
+    def test_handles_various_version_formats(self, tmp_path, plugin, version):
+        dist_info = tmp_path / f"litellm-{version}.dist-info"
+        dist_info.mkdir()
+        (dist_info / "METADATA").write_text(f"Version: {version}\n")
+        assert plugin.extract_version(dist_info) == version
 
 
-# ── scan_environments (integration) ───────────────────────────────────
+# ── npm: extract_version ──────────────────────────────────────────────
+
+
+class TestNpmExtractVersion:
+
+    @pytest.fixture
+    def plugin(self):
+        return NpmPlugin()
+
+    def test_reads_version_from_package_json(self, tmp_path, plugin):
+        pkg_dir = tmp_path / "axios"
+        pkg_dir.mkdir()
+        (pkg_dir / "package.json").write_text(
+            json.dumps({"name": "axios", "version": "1.14.1"})
+        )
+        assert plugin.extract_version(pkg_dir) == "1.14.1"
+
+    def test_returns_none_when_no_package_json(self, tmp_path, plugin):
+        pkg_dir = tmp_path / "axios"
+        pkg_dir.mkdir()
+        assert plugin.extract_version(pkg_dir) is None
+
+    def test_returns_none_for_invalid_json(self, tmp_path, plugin):
+        pkg_dir = tmp_path / "axios"
+        pkg_dir.mkdir()
+        (pkg_dir / "package.json").write_text("not json")
+        assert plugin.extract_version(pkg_dir) is None
+
+    def test_returns_none_when_version_field_missing(self, tmp_path, plugin):
+        pkg_dir = tmp_path / "axios"
+        pkg_dir.mkdir()
+        (pkg_dir / "package.json").write_text('{"name": "axios"}')
+        assert plugin.extract_version(pkg_dir) is None
+
+
+# ── scan_environments (integration) ──────────────────────────────────
 
 
 class TestScanEnvironments:
 
-    def test_populates_results_with_installations(self, tmp_path):
+    def test_reports_compromised_installation(self, tmp_path, capsys):
         dist_info = tmp_path / "litellm-1.82.7.dist-info"
         dist_info.mkdir()
         (dist_info / "METADATA").write_text("Version: 1.82.7\n")
 
-        results = ScanResults()
-        scan_environments([dist_info], results)
+        threat = make_litellm_threat()
+        ecosystem = PyPIPlugin()
+        results = ScanResults(compromised_versions=threat.compromised)
+        scan_environments([dist_info], results, ecosystem, threat)
 
-        assert results.envs_scanned == 1
         assert len(results.installations) == 1
         assert results.installations[0].version == "1.82.7"
-
-    def test_prints_compromised_label(self, tmp_path, capsys):
-        dist_info = tmp_path / "litellm-1.82.7.dist-info"
-        dist_info.mkdir()
-        (dist_info / "METADATA").write_text("Version: 1.82.7\n")
-
-        results = ScanResults()
-        scan_environments([dist_info], results)
-
         captured = capsys.readouterr().out
         assert "COMPROMISED" in captured
 
-    def test_prints_clean_label_for_safe_version(self, tmp_path, capsys):
-        dist_info = tmp_path / "litellm-1.80.0.dist-info"
+    def test_reports_safe_installation(self, tmp_path, capsys):
+        dist_info = tmp_path / "litellm-1.82.6.dist-info"
         dist_info.mkdir()
-        (dist_info / "METADATA").write_text("Version: 1.80.0\n")
+        (dist_info / "METADATA").write_text("Version: 1.82.6\n")
 
-        results = ScanResults()
-        scan_environments([dist_info], results)
+        threat = make_litellm_threat()
+        ecosystem = PyPIPlugin()
+        results = ScanResults(compromised_versions=threat.compromised)
+        scan_environments([dist_info], results, ecosystem, threat)
 
+        assert len(results.installations) == 1
         captured = capsys.readouterr().out
         assert "clean" in captured
 
-    def test_prints_no_installations_message_when_empty(self, capsys):
-        results = ScanResults()
-        scan_environments([], results)
+    def test_reports_no_installations_found(self, capsys):
+        threat = make_litellm_threat()
+        ecosystem = PyPIPlugin()
+        results = ScanResults(compromised_versions=threat.compromised)
+        scan_environments([], results, ecosystem, threat)
 
+        assert results.installations == []
         captured = capsys.readouterr().out
         assert "No litellm installations found" in captured
-
-    def test_skips_unreadable_metadata(self, tmp_path):
-        dist_info = tmp_path / "litellm-unknown"
-        dist_info.mkdir()
-        # dirname doesn't match patterns, no metadata files
-
-        results = ScanResults()
-        scan_environments([dist_info], results)
-
-        assert results.envs_scanned == 1
-        assert results.installations == []

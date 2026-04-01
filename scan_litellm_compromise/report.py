@@ -8,7 +8,7 @@ from .formatting import BOLD, GREEN, RED, RESET, YELLOW, print_separator
 from .models import ConfigReference, ScanResults, SourceReference
 
 if TYPE_CHECKING:
-    from .platform_policy import PlatformPolicy
+    from .threat_profile import ThreatProfile
 
 _MAX_LINES_PER_FILE = 5
 
@@ -26,24 +26,30 @@ def _group_by_file(refs, key=None):
     return grouped
 
 
-def _format_version_tag(ref: ConfigReference) -> str:
+def _format_version_tag(
+    ref: ConfigReference, compromised: frozenset[str],
+) -> str:
     """Format a version annotation for a config reference."""
-    if ref.pinned_version and ref.is_compromised:
+    if ref.pinned_version and ref.pinned_version in compromised:
         return f"  {RED}{BOLD}! PINNED TO COMPROMISED VERSION{RESET}"
     if ref.pinned_version:
         return f"  {GREEN}(v{ref.pinned_version}){RESET}"
     return ""
 
 
-def print_source_refs(refs: list[SourceReference]) -> None:
+def print_source_refs(
+    refs: list[SourceReference], package: str,
+) -> None:
     """Print grouped source file references."""
     if not refs:
-        print(f"  {GREEN}+ No litellm imports found in Python source files{RESET}\n")
+        print(
+            f"  {GREEN}+ No {package} imports found in source files{RESET}\n"
+        )
         return
 
     by_file = _group_by_file(refs)
     print(
-        f"  {BOLD}Python source files referencing litellm "
+        f"  {BOLD}Source files referencing {package} "
         f"({len(by_file)} files):{RESET}\n"
     )
 
@@ -57,25 +63,29 @@ def print_source_refs(refs: list[SourceReference]) -> None:
         print()
 
 
-def print_config_refs(refs: list[ConfigReference]) -> None:
+def print_config_refs(
+    refs: list[ConfigReference],
+    package: str,
+    compromised: frozenset[str],
+) -> None:
     """Print grouped config file references with version annotations."""
     if not refs:
         print(
-            f"  {GREEN}+ No litellm dependencies found in "
+            f"  {GREEN}+ No {package} dependencies found in "
             f"config/requirements files{RESET}\n"
         )
         return
 
     by_file = _group_by_file(refs)
     print(
-        f"  {BOLD}Config/dependency files referencing litellm "
+        f"  {BOLD}Config/dependency files referencing {package} "
         f"({len(by_file)} files):{RESET}\n"
     )
 
     for file_path, file_refs in sorted(by_file.items()):
         print(f"    {YELLOW}{file_path}{RESET}")
         for ref in file_refs:
-            version_tag = _format_version_tag(ref)
+            version_tag = _format_version_tag(ref, compromised)
             print(f"      L{ref.line_number}: {ref.line_content}{version_tag}")
         print()
 
@@ -83,11 +93,12 @@ def print_config_refs(refs: list[ConfigReference]) -> None:
 # ── Stats ────────────────────────────────────────────────────────────────
 
 
-def _print_stats(results: ScanResults) -> None:
+def _print_stats(results: ScanResults, threat: ThreatProfile) -> None:
     """Print scan statistics."""
+    pkg = threat.package
     print(f"  Environments scanned:         {BOLD}{results.envs_scanned}{RESET}")
     print(
-        f"  litellm installations found:  "
+        f"  {pkg} installations found:  "
         f"{BOLD}{len(results.installations)}{RESET}"
     )
 
@@ -109,11 +120,11 @@ def _print_stats(results: ScanResults) -> None:
         print(f"  IOC artifacts found:           {GREEN}0{RESET}")
 
     print(
-        f"  Python files using litellm:    "
+        f"  Source files using {pkg}:    "
         f"{BOLD}{len(results.source_files)}{RESET} files"
     )
     print(
-        f"  Config files with litellm:     "
+        f"  Config files with {pkg}:     "
         f"{BOLD}{len(results.config_files)}{RESET} files"
     )
 
@@ -128,74 +139,131 @@ def _print_stats(results: ScanResults) -> None:
 # ── Verdicts ─────────────────────────────────────────────────────────────
 
 
-def _print_remediation(results: ScanResults, policy: PlatformPolicy) -> None:
+def _print_remediation(
+    results: ScanResults, threat: ThreatProfile,
+) -> None:
     """Print remediation steps for a compromised system."""
+    remediation = threat.remediation
     print()
-    print_separator()
-    print(f"\n{RED}{BOLD}!  COMPROMISE DETECTED -- REMEDIATION STEPS:{RESET}\n")
+    print(f"  {RED}{BOLD}!  COMPROMISE DETECTED -- REMEDIATION STEPS:{RESET}\n")
 
-    print(f"  1. {BOLD}Assume ALL secrets on this machine are compromised{RESET}")
-    print(f"     -> Rotate SSH keys, cloud credentials (AWS/GCP/Azure), API keys")
-    print(f"     -> Revoke and regenerate .env files and .gitconfig tokens")
-    print()
-    print(f"  2. {BOLD}Remove malicious artifacts:{RESET}")
-    for line in policy.remediation_artifact_lines():
-        print(f"     {line}")
-    print()
-    print(f"  3. {BOLD}Fix litellm:{RESET}")
-    print(f"     -> pip install litellm==1.82.6  (last known safe version)")
-    print(f"     -> Or upgrade past compromised range once verified")
-    print()
+    step = 1
+    if remediation.rotate_secrets:
+        print(
+            f"  {step}. {BOLD}Assume ALL secrets on this machine "
+            f"are compromised{RESET}"
+        )
+        print(
+            f"     -> Rotate SSH keys, cloud credentials (AWS/GCP/Azure), "
+            f"API keys"
+        )
+        print(f"     -> Revoke and regenerate .env files and tokens")
+        print()
+        step += 1
+
+    artifact_lines = remediation.artifact_lines_for_platform()
+    if artifact_lines:
+        print(f"  {step}. {BOLD}Remove malicious artifacts:{RESET}")
+        for line in artifact_lines:
+            print(f"     -> {line}")
+        print()
+        step += 1
+
+    if remediation.install_command:
+        print(f"  {step}. {BOLD}Fix {threat.package}:{RESET}")
+        print(f"     -> {remediation.install_command}")
+        print(f"     -> Or upgrade past compromised range once verified")
+        print()
+        step += 1
 
     compromised_configs = results.compromised_configs
     if compromised_configs:
-        print(f"  4. {BOLD}Update pinned versions in config files:{RESET}")
+        print(f"  {step}. {BOLD}Update pinned versions in config files:{RESET}")
         for ref in compromised_configs:
             print(f"     -> {ref.file_path}:{ref.line_number}")
             print(f"       Change: {ref.line_content}")
         print()
+        step += 1
 
-    print(f"  5. {BOLD}If running Kubernetes:{RESET}")
-    print(f"     -> Delete any node-setup-* pods in kube-system namespace")
-    print(f"     -> Audit cluster for privileged pods with host mounts")
-    print()
-    print(f"  6. {BOLD}{policy.remediation_persistence_steps()[0]}{RESET}")
-    for step in policy.remediation_persistence_steps()[1:]:
-        print(f"     {step}")
-    print()
-    print(f"  Reference: https://github.com/BerriAI/litellm/issues/24512")
-    print_separator()
+    persistence_steps = remediation.persistence_steps_for_platform()
+    if persistence_steps:
+        print(f"  {step}. {BOLD}Check persistence mechanisms:{RESET}")
+        for ps in persistence_steps:
+            print(f"     -> {ps}")
+        print()
+
+    if threat.advisory:
+        print(f"  Reference: {threat.advisory}")
 
 
-def _print_clean_verdict(results: ScanResults) -> None:
+def _print_clean_verdict(
+    results: ScanResults, threat: ThreatProfile,
+) -> None:
     """Print the all-clear verdict with optional warnings."""
     print()
     print(f"  {GREEN}{BOLD}+ No compromise detected. System appears clean.{RESET}")
 
     if results.source_refs or results.config_refs:
+        compromised_str = ", ".join(sorted(threat.compromised))
         print()
         print(
-            f"  {YELLOW}{BOLD}NOTE:{RESET} litellm references were found in source "
-            f"or config files."
+            f"  {YELLOW}{BOLD}NOTE:{RESET} {threat.package} references were "
+            f"found in source or config files."
         )
         print(
             f"  Verify they use a safe version "
-            f"(not 1.82.7, not 1.82.8) and update if needed."
+            f"(not {compromised_str}) and update if needed."
         )
 
-    print_separator()
+
+# ── Per-threat report ───────────────────────────────────────────────────
 
 
-# ── Public entry point ───────────────────────────────────────────────────
-
-
-def print_summary(results: ScanResults, policy: PlatformPolicy) -> None:
-    """Print the final scan summary and verdict."""
-    print_separator()
-    print(f"\n{BOLD}SCAN RESULTS{RESET}\n")
-    _print_stats(results)
+def print_threat_report(
+    results: ScanResults, threat: ThreatProfile,
+) -> None:
+    """Print the scan report for a single threat."""
+    print(
+        f"\n{BOLD}--- {threat.id} "
+        f"({threat.ecosystem.upper()}: {threat.package}) ---{RESET}\n"
+    )
+    _print_stats(results, threat)
 
     if results.is_clean:
-        _print_clean_verdict(results)
+        _print_clean_verdict(results, threat)
     else:
-        _print_remediation(results, policy)
+        _print_remediation(results, threat)
+
+
+# ── Multi-threat summary ────────────────────────────────────────────────
+
+
+def print_multi_threat_summary(
+    threat_results: list[tuple[ThreatProfile, ScanResults]],
+) -> None:
+    """Print the combined summary across all threat scans."""
+    print_separator()
+    print(
+        f"\n{BOLD}SCAN RESULTS -- "
+        f"{len(threat_results)} threat profile(s) checked{RESET}\n"
+    )
+
+    any_compromised = False
+    for threat, results in threat_results:
+        print_threat_report(results, threat)
+        if not results.is_clean:
+            any_compromised = True
+        print()
+
+    print_separator()
+    if any_compromised:
+        print(
+            f"\n{RED}{BOLD}!! ONE OR MORE COMPROMISES DETECTED -- "
+            f"SEE REMEDIATION ABOVE !!{RESET}\n"
+        )
+    else:
+        print(
+            f"\n{GREEN}{BOLD}All checks passed. "
+            f"No known supply chain compromises detected.{RESET}\n"
+        )
+    print_separator()

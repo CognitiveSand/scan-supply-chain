@@ -10,6 +10,21 @@ from scan_litellm_compromise.models import (
     ScanResults,
     SourceReference,
 )
+from scan_litellm_compromise.threat_profile import (
+    C2Info,
+    KnownPathIOC,
+    KubernetesIOC,
+    RemediationInfo,
+    ThreatProfile,
+    WalkFileIOC,
+    WindowsIOC,
+)
+
+
+# ── Compromised version sets ──────────────────────────────────────────
+
+LITELLM_COMPROMISED = frozenset({"1.82.7", "1.82.8"})
+AXIOS_COMPROMISED = frozenset({"1.14.1", "0.30.4"})
 
 
 # ── Stub policy ────────────────────────────────────────────────────────
@@ -19,13 +34,9 @@ class StubPolicy:
     """Minimal PlatformPolicy satisfying the Protocol for tests."""
 
     name = "TestOS"
+    platform_key = "linux"
     search_roots: list[str] = []
     conda_globs: list[str] = []
-    persistence_paths: list[str] = []
-    persistence_description = "test persistence"
-    tmp_iocs: list[str] = []
-    tmp_description = "test tmp"
-    pth_search_roots: list[str] = []
     network_check_command = None
     exclusion_note = "test note"
 
@@ -35,14 +46,136 @@ class StubPolicy:
     def home_pipx_dir(self) -> Path | None:
         return None
 
-    def extra_ioc_checks(self, results) -> None:
-        pass
 
-    def remediation_persistence_steps(self) -> list[str]:
-        return ["Check test persistence"]
+# ── Stub ecosystem ────────────────────────────────────────────────────
 
-    def remediation_artifact_lines(self) -> list[str]:
-        return ["-> Remove test artifacts"]
+
+class StubEcosystem:
+    """Minimal EcosystemPlugin for tests."""
+
+    name = "stub"
+    source_extensions = frozenset({".py"})
+    config_filenames = frozenset({"requirements.txt"})
+    config_extensions = frozenset({".toml"})
+
+    def metadata_dir_pattern(self, package):
+        import re
+        return re.compile(rf"^{re.escape(package)}-([^/\\]+)\.(dist-info|egg-info)$")
+
+    def extract_version(self, metadata_path):
+        return None
+
+    def import_patterns(self, package):
+        return []
+
+    def dep_patterns(self, package):
+        return []
+
+    def pinned_version_pattern(self, package):
+        import re
+        return re.compile(rf"{re.escape(package)}==([0-9][0-9a-zA-Z.*]+)")
+
+    def config_filename_pattern(self):
+        return None
+
+    def extra_search_roots(self):
+        return []
+
+    def find_phantom_deps(self, names, roots):
+        return []
+
+
+# ── Stub threat profiles ──────────────────────────────────────────────
+
+
+def make_litellm_threat(**overrides) -> ThreatProfile:
+    """Build a litellm ThreatProfile with sensible test defaults."""
+    defaults = dict(
+        id="litellm-test",
+        name="LiteLLM Test",
+        date="2026-03-24",
+        ecosystem="pypi",
+        package="litellm",
+        compromised=LITELLM_COMPROMISED,
+        safe="1.82.6",
+        advisory="https://example.com/litellm",
+        description="test",
+        c2=C2Info(
+            domains=["models.litellm.cloud", "checkmarx.zone"],
+            ips={
+                "models.litellm.cloud": ["46.151.182.203"],
+                "checkmarx.zone": ["83.142.209.11"],
+            },
+        ),
+        walk_files=[
+            WalkFileIOC(
+                description="litellm_init.pth (auto-exec backdoor)",
+                filenames=["litellm_init.pth"],
+                sha256=["71e35aef03099cd1f2d6446734273025a163597de93912df321ef118bf135238"],
+            ),
+        ],
+        known_paths=[
+            KnownPathIOC(
+                description="sysmon persistence",
+                linux=["~/.config/sysmon/sysmon.py"],
+            ),
+        ],
+        phantom_deps=[],
+        kubernetes=KubernetesIOC(
+            pod_patterns=["node-setup-"],
+            namespace="kube-system",
+        ),
+        windows_ioc=WindowsIOC(
+            registry_keywords=["sysmon", "litellm"],
+            schtask_keywords=["sysmon"],
+        ),
+        remediation=RemediationInfo(
+            rotate_secrets=True,
+            install_command="pip install litellm==1.82.6",
+            remove_artifacts={"linux": ["Remove litellm_init.pth"]},
+            check_persistence={"linux": ["systemctl --user list-units | grep sysmon"]},
+        ),
+    )
+    defaults.update(overrides)
+    return ThreatProfile(**defaults)
+
+
+def make_axios_threat(**overrides) -> ThreatProfile:
+    """Build an axios ThreatProfile with sensible test defaults."""
+    defaults = dict(
+        id="axios-test",
+        name="Axios Test",
+        date="2026-03-31",
+        ecosystem="npm",
+        package="axios",
+        compromised=AXIOS_COMPROMISED,
+        safe="1.14.0",
+        advisory="https://example.com/axios",
+        description="test",
+        c2=C2Info(
+            domains=["sfrclak.com"],
+            ips={"sfrclak.com": ["142.11.206.73"]},
+            ports=[8000],
+        ),
+        walk_files=[],
+        known_paths=[
+            KnownPathIOC(
+                description="RAT payload",
+                linux=["/tmp/ld.py"],
+            ),
+        ],
+        phantom_deps=["plain-crypto-js"],
+        kubernetes=KubernetesIOC(),
+        windows_ioc=WindowsIOC(),
+        remediation=RemediationInfo(
+            rotate_secrets=True,
+            install_command="npm install axios@1.14.0",
+            remove_artifacts={"linux": ["Remove /tmp/ld.py"]},
+            check_persistence={"linux": ["ps aux | grep ld.py"]},
+        ),
+    )
+    defaults.update(overrides)
+    return ThreatProfile(**defaults)
 
 
 # ── Model fixtures ─────────────────────────────────────────────────────
@@ -50,7 +183,7 @@ class StubPolicy:
 
 @pytest.fixture
 def clean_results() -> ScanResults:
-    return ScanResults()
+    return ScanResults(compromised_versions=LITELLM_COMPROMISED)
 
 
 @pytest.fixture
@@ -93,3 +226,18 @@ def sample_config_ref_safe() -> ConfigReference:
 @pytest.fixture
 def stub_policy() -> StubPolicy:
     return StubPolicy()
+
+
+@pytest.fixture
+def stub_ecosystem() -> StubEcosystem:
+    return StubEcosystem()
+
+
+@pytest.fixture
+def litellm_threat() -> ThreatProfile:
+    return make_litellm_threat()
+
+
+@pytest.fixture
+def axios_threat() -> ThreatProfile:
+    return make_axios_threat()

@@ -2,24 +2,18 @@
 
 from dataclasses import dataclass, field
 
-from .config import COMPROMISED_VERSIONS
-
 
 @dataclass(frozen=True)
 class Installation:
-    """A litellm installation found via filesystem metadata."""
+    """A package installation found via filesystem metadata."""
 
     env_path: str
     version: str
 
-    @property
-    def is_compromised(self) -> bool:
-        return self.version in COMPROMISED_VERSIONS
-
 
 @dataclass(frozen=True)
 class SourceReference:
-    """A reference to litellm found in a Python source file."""
+    """A reference to the package found in a source file."""
 
     file_path: str
     line_number: int
@@ -28,22 +22,19 @@ class SourceReference:
 
 @dataclass(frozen=True)
 class ConfigReference:
-    """A reference to litellm found in a config/dependency file."""
+    """A reference to the package found in a config/dependency file."""
 
     file_path: str
     line_number: int
     line_content: str
     pinned_version: str | None = None
 
-    @property
-    def is_compromised(self) -> bool:
-        return self.pinned_version in COMPROMISED_VERSIONS
-
 
 @dataclass
 class ScanResults:
-    """Aggregated results from all scan phases."""
+    """Aggregated results from all scan phases for a single threat."""
 
+    compromised_versions: frozenset[str] = frozenset()
     envs_scanned: int = 0
     installations: list[Installation] = field(default_factory=list)
     iocs: list[str] = field(default_factory=list)
@@ -52,11 +43,17 @@ class ScanResults:
 
     @property
     def compromised_installations(self) -> list[Installation]:
-        return [i for i in self.installations if i.is_compromised]
+        return [
+            i for i in self.installations
+            if i.version in self.compromised_versions
+        ]
 
     @property
     def compromised_configs(self) -> list[ConfigReference]:
-        return [r for r in self.config_refs if r.is_compromised]
+        return [
+            r for r in self.config_refs
+            if r.pinned_version in self.compromised_versions
+        ]
 
     @property
     def is_clean(self) -> bool:

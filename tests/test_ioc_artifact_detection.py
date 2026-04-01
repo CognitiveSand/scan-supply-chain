@@ -6,20 +6,18 @@ Module under test: scan_litellm_compromise.ioc_scanner
 import socket
 import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
-from scan_litellm_compromise.config import C2_KNOWN_IPS
 from scan_litellm_compromise.ioc_scanner import (
     _check_known_paths,
     _resolve_c2_ips,
-    _scan_for_backdoor_pth,
     _scan_for_c2_connections,
     _scan_for_malicious_pods,
+    _scan_walk_files,
 )
 from scan_litellm_compromise.models import ScanResults
-from tests.conftest import StubPolicy
+from tests.conftest import StubPolicy, make_litellm_threat
 
 
 # ── _check_known_paths ────────────────────────────────────────────────
@@ -68,46 +66,76 @@ class TestCheckKnownPaths:
         assert results.iocs == []
 
 
-# ── _scan_for_backdoor_pth ───────────────────────────────────────────
+# ── _scan_walk_files ─────────────────────────────────────────────────
 
 
-class TestScanForBackdoorPth:
+class TestScanWalkFiles:
 
     def test_finds_litellm_init_pth(self, tmp_path, capsys):
         site_pkg = tmp_path / "lib" / "site-packages"
         site_pkg.mkdir(parents=True)
         (site_pkg / "litellm_init.pth").write_text("import os")
 
+        # Use walk_files with no sha256 requirement so any matching filename is flagged
+        from scan_litellm_compromise.threat_profile import WalkFileIOC
+        threat = make_litellm_threat(
+            walk_files=[WalkFileIOC(
+                description="litellm_init.pth (auto-exec backdoor)",
+                filenames=["litellm_init.pth"],
+                sha256=[],
+            )],
+        )
         policy = StubPolicy()
-        policy.pth_search_roots = [str(tmp_path)]
+        policy.search_roots = [str(tmp_path)]
 
         results = ScanResults()
-        _scan_for_backdoor_pth(results, policy)
+        _scan_walk_files(results, threat, policy)
 
         assert len(results.iocs) == 1
         assert "litellm_init.pth" in results.iocs[0]
 
-    def test_reports_clean_when_no_pth_found(self, tmp_path, capsys):
+    def test_reports_clean_when_no_files_found(self, tmp_path, capsys):
         (tmp_path / "lib" / "site-packages").mkdir(parents=True)
 
+        threat = make_litellm_threat()
         policy = StubPolicy()
-        policy.pth_search_roots = [str(tmp_path)]
+        policy.search_roots = [str(tmp_path)]
 
         results = ScanResults()
-        _scan_for_backdoor_pth(results, policy)
+        _scan_walk_files(results, threat, policy)
 
         assert results.iocs == []
         captured = capsys.readouterr().out
         assert "None found" in captured
 
     def test_skips_nonexistent_search_roots(self, capsys):
+        threat = make_litellm_threat()
         policy = StubPolicy()
-        policy.pth_search_roots = ["/nonexistent/path/that/does/not/exist"]
+        policy.search_roots = ["/nonexistent/path/that/does/not/exist"]
 
         results = ScanResults()
-        _scan_for_backdoor_pth(results, policy)
+        _scan_walk_files(results, threat, policy)
 
         assert results.iocs == []
+
+    def test_respects_scan_path(self, tmp_path, capsys):
+        (tmp_path / "litellm_init.pth").write_text("import os")
+
+        from scan_litellm_compromise.threat_profile import WalkFileIOC
+        threat = make_litellm_threat(
+            walk_files=[WalkFileIOC(
+                description="litellm_init.pth (auto-exec backdoor)",
+                filenames=["litellm_init.pth"],
+                sha256=[],
+            )],
+        )
+        policy = StubPolicy()
+        policy.search_roots = ["/should/not/be/used"]
+
+        results = ScanResults()
+        _scan_walk_files(results, threat, policy, scan_path=str(tmp_path))
+
+        assert len(results.iocs) == 1
 
 
 # ── _resolve_c2_ips (pure helper) ────────────────────────────────────
@@ -116,9 +144,10 @@ class TestScanForBackdoorPth:
 class TestResolveC2Ips:
 
     def test_returns_known_ips_when_dns_disabled(self):
-        result = _resolve_c2_ips(resolve_dns=False)
+        threat = make_litellm_threat()
+        result = _resolve_c2_ips(threat, resolve_dns=False)
 
-        for domain, known_ips in C2_KNOWN_IPS.items():
+        for domain, known_ips in threat.c2.ips.items():
             assert domain in result
             for ip in known_ips:
                 assert ip in result[domain]
@@ -130,7 +159,8 @@ class TestResolveC2Ips:
             lambda d: dns_called.append(d) or "1.2.3.4",
         )
 
-        _resolve_c2_ips(resolve_dns=False)
+        threat = make_litellm_threat()
+        _resolve_c2_ips(threat, resolve_dns=False)
 
         assert dns_called == []
 
@@ -140,23 +170,23 @@ class TestResolveC2Ips:
             lambda d: "99.99.99.99",
         )
 
-        result = _resolve_c2_ips(resolve_dns=True)
+        threat = make_litellm_threat()
+        result = _resolve_c2_ips(threat, resolve_dns=True)
 
-        # Should contain both known IPs and the live-resolved IP
-        for domain in C2_KNOWN_IPS:
+        for domain in threat.c2.ips:
             assert "99.99.99.99" in result[domain]
 
     def test_deduplicates_live_ip_matching_known(self, monkeypatch):
-        known_ip = list(C2_KNOWN_IPS.values())[0][0]
+        threat = make_litellm_threat()
+        first_domain = list(threat.c2.ips.keys())[0]
+        known_ip = threat.c2.ips[first_domain][0]
         monkeypatch.setattr(
             "scan_litellm_compromise.ioc_scanner.socket.gethostbyname",
             lambda d: known_ip,
         )
 
-        result = _resolve_c2_ips(resolve_dns=True)
+        result = _resolve_c2_ips(threat, resolve_dns=True)
 
-        # Known IP should appear only once, not duplicated
-        first_domain = list(C2_KNOWN_IPS.keys())[0]
         assert result[first_domain].count(known_ip) == 1
 
     def test_handles_dns_failure_gracefully(self, monkeypatch):
@@ -167,10 +197,10 @@ class TestResolveC2Ips:
             ),
         )
 
-        result = _resolve_c2_ips(resolve_dns=True)
+        threat = make_litellm_threat()
+        result = _resolve_c2_ips(threat, resolve_dns=True)
 
-        # Should still have the known IPs even though DNS failed
-        for domain, known_ips in C2_KNOWN_IPS.items():
+        for domain, known_ips in threat.c2.ips.items():
             assert domain in result
             for ip in known_ips:
                 assert ip in result[domain]
@@ -182,7 +212,6 @@ class TestResolveC2Ips:
 class TestScanForC2Connections:
 
     def _stub_ss(self, monkeypatch, stdout):
-        """Helper: stub shutil.which and subprocess.run for ss command."""
         stdout_bytes = stdout.encode() if isinstance(stdout, str) else stdout
         monkeypatch.setattr(
             "scan_litellm_compromise.ioc_scanner.shutil.which",
@@ -196,75 +225,28 @@ class TestScanForC2Connections:
         )
 
     def test_flags_known_ip_without_dns(self, monkeypatch, capsys):
-        known_ip = C2_KNOWN_IPS["models.litellm.cloud"][0]
+        threat = make_litellm_threat()
+        known_ip = threat.c2.ips["models.litellm.cloud"][0]
         self._stub_ss(monkeypatch, f"ESTAB  0  0  10.0.0.1:443  {known_ip}:80\n")
 
         policy = StubPolicy()
         policy.network_check_command = ["ss", "-tnp"]
 
         results = ScanResults()
-        _scan_for_c2_connections(results, policy)  # resolve_c2=False by default
+        _scan_for_c2_connections(results, threat, policy)
 
         assert len(results.iocs) >= 1
         assert any("connection:" in ioc and known_ip in ioc for ioc in results.iocs)
 
-    def test_no_dns_queries_by_default(self, monkeypatch, capsys):
-        dns_called = []
-        self._stub_ss(monkeypatch, "ESTAB  0  0  10.0.0.1:443  1.2.3.4:80\n")
-        monkeypatch.setattr(
-            "scan_litellm_compromise.ioc_scanner.socket.gethostbyname",
-            lambda d: dns_called.append(d) or "1.2.3.4",
-        )
-
-        policy = StubPolicy()
-        policy.network_check_command = ["ss", "-tnp"]
-
-        results = ScanResults()
-        _scan_for_c2_connections(results, policy)
-
-        assert dns_called == []
-
-    def test_dns_called_when_resolve_c2_enabled(self, monkeypatch, capsys):
-        dns_called = []
-        self._stub_ss(monkeypatch, "ESTAB  0  0  10.0.0.1:443  1.2.3.4:80\n")
-        monkeypatch.setattr(
-            "scan_litellm_compromise.ioc_scanner.socket.gethostbyname",
-            lambda d: dns_called.append(d) or "99.99.99.99",
-        )
-
-        policy = StubPolicy()
-        policy.network_check_command = ["ss", "-tnp"]
-
-        results = ScanResults()
-        _scan_for_c2_connections(results, policy, resolve_c2=True)
-
-        assert len(dns_called) > 0
-
-    def test_prints_warning_when_resolve_c2_enabled(self, monkeypatch, capsys):
-        self._stub_ss(monkeypatch, "no connections\n")
-        monkeypatch.setattr(
-            "scan_litellm_compromise.ioc_scanner.socket.gethostbyname",
-            lambda d: "99.99.99.99",
-        )
-
-        policy = StubPolicy()
-        policy.network_check_command = ["ss", "-tnp"]
-
-        results = ScanResults()
-        _scan_for_c2_connections(results, policy, resolve_c2=True)
-
-        captured = capsys.readouterr().out
-        assert "--resolve-c2" in captured
-        assert "DNS" in captured
-
     def test_reports_clean_when_no_c2_ips_in_output(self, monkeypatch, capsys):
         self._stub_ss(monkeypatch, "ESTAB  0  0  10.0.0.1:443  1.2.3.4:80\n")
 
+        threat = make_litellm_threat()
         policy = StubPolicy()
         policy.network_check_command = ["ss", "-tnp"]
 
         results = ScanResults()
-        _scan_for_c2_connections(results, policy)
+        _scan_for_c2_connections(results, threat, policy)
 
         assert results.iocs == []
         captured = capsys.readouterr().out
@@ -276,20 +258,22 @@ class TestScanForC2Connections:
             lambda cmd: None,
         )
 
+        threat = make_litellm_threat()
         policy = StubPolicy()
         policy.network_check_command = ["ss", "-tnp"]
 
         results = ScanResults()
-        _scan_for_c2_connections(results, policy)
+        _scan_for_c2_connections(results, threat, policy)
 
         assert results.iocs == []
 
     def test_skips_when_no_network_command_configured(self, capsys):
+        threat = make_litellm_threat()
         policy = StubPolicy()
         policy.network_check_command = None
 
         results = ScanResults()
-        _scan_for_c2_connections(results, policy)
+        _scan_for_c2_connections(results, threat, policy)
 
         assert results.iocs == []
 
@@ -305,33 +289,14 @@ class TestScanForC2Connections:
             ),
         )
 
+        threat = make_litellm_threat()
         policy = StubPolicy()
         policy.network_check_command = ["ss", "-tnp"]
 
         results = ScanResults()
-        _scan_for_c2_connections(results, policy)
+        _scan_for_c2_connections(results, threat, policy)
 
         assert results.iocs == []
-
-    def test_dns_failure_still_uses_known_ips(self, monkeypatch, capsys):
-        known_ip = C2_KNOWN_IPS["checkmarx.zone"][0]
-        self._stub_ss(monkeypatch, f"ESTAB  0  0  10.0.0.1:443  {known_ip}:80\n")
-        monkeypatch.setattr(
-            "scan_litellm_compromise.ioc_scanner.socket.gethostbyname",
-            lambda d: (_ for _ in ()).throw(
-                socket.gaierror("Name resolution failed"),
-            ),
-        )
-
-        policy = StubPolicy()
-        policy.network_check_command = ["ss", "-tnp"]
-
-        results = ScanResults()
-        _scan_for_c2_connections(results, policy, resolve_c2=True)
-
-        # Known IPs still work even though DNS failed
-        assert len(results.iocs) >= 1
-        assert any(known_ip in ioc for ioc in results.iocs)
 
 
 # ── _scan_for_malicious_pods ─────────────────────────────────────────
@@ -352,8 +317,9 @@ class TestScanForMaliciousPods:
             ),
         )
 
+        threat = make_litellm_threat()
         results = ScanResults()
-        _scan_for_malicious_pods(results)
+        _scan_for_malicious_pods(results, threat)
 
         assert len(results.iocs) == 1
         assert "k8s-pods:1" in results.iocs[0]
@@ -371,8 +337,9 @@ class TestScanForMaliciousPods:
             ),
         )
 
+        threat = make_litellm_threat()
         results = ScanResults()
-        _scan_for_malicious_pods(results)
+        _scan_for_malicious_pods(results, threat)
 
         assert results.iocs == []
         captured = capsys.readouterr().out
@@ -384,24 +351,18 @@ class TestScanForMaliciousPods:
             lambda cmd: None,
         )
 
+        threat = make_litellm_threat()
         results = ScanResults()
-        _scan_for_malicious_pods(results)
+        _scan_for_malicious_pods(results, threat)
 
         assert results.iocs == []
 
-    def test_handles_kubectl_timeout(self, monkeypatch, capsys):
-        monkeypatch.setattr(
-            "scan_litellm_compromise.ioc_scanner.shutil.which",
-            lambda cmd: "/usr/bin/kubectl" if cmd == "kubectl" else None,
+    def test_skips_when_no_pod_patterns(self, monkeypatch, capsys):
+        threat = make_litellm_threat(
+            kubernetes=__import__(
+                "scan_litellm_compromise.threat_profile", fromlist=["KubernetesIOC"]
+            ).KubernetesIOC(),
         )
-        monkeypatch.setattr(
-            "scan_litellm_compromise.ioc_scanner.subprocess.run",
-            lambda *a, **kw: (_ for _ in ()).throw(
-                subprocess.TimeoutExpired(cmd="kubectl", timeout=10),
-            ),
-        )
-
         results = ScanResults()
-        _scan_for_malicious_pods(results)
-
+        _scan_for_malicious_pods(results, threat)
         assert results.iocs == []

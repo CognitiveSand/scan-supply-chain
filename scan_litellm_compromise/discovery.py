@@ -1,4 +1,4 @@
-"""Phase 1: Discover litellm installations via filesystem metadata."""
+"""Phase 1: Discover package installations via filesystem metadata."""
 
 from __future__ import annotations
 
@@ -8,16 +8,19 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .config import DISCOVERY_SKIP_DIRS, DIST_INFO_PATTERN, EGG_INFO_PATTERN
+from .config import DISCOVERY_SKIP_DIRS
 
 if TYPE_CHECKING:
+    from .ecosystem_base import EcosystemPlugin
     from .platform_policy import PlatformPolicy
 
 logger = logging.getLogger(__name__)
 
 
-def _build_search_roots(policy: PlatformPolicy) -> list[str]:
-    """Combine platform roots with user-local conda/pipx directories."""
+def _build_search_roots(
+    policy: PlatformPolicy, ecosystem: EcosystemPlugin,
+) -> list[str]:
+    """Combine platform roots with user-local conda/pipx/ecosystem dirs."""
     roots = list(policy.search_roots)
     home = Path.home()
 
@@ -33,25 +36,40 @@ def _build_search_roots(policy: PlatformPolicy) -> list[str]:
     for pattern in policy.conda_globs:
         roots.extend(globmod.glob(pattern))
 
+    roots.extend(ecosystem.extra_search_roots())
+
     return roots
 
 
-def _is_litellm_metadata_dir(dirname: str) -> bool:
-    """Check if a directory name is a litellm dist-info or egg-info."""
-    return bool(
-        DIST_INFO_PATTERN.match(dirname) or EGG_INFO_PATTERN.match(dirname)
-    )
-
-
-def _walk_for_litellm_metadata(root: Path) -> list[Path]:
-    """Walk a directory tree looking for litellm metadata directories."""
+def _walk_for_metadata(
+    root: Path, metadata_pattern, package: str,
+) -> list[Path]:
+    """Walk a directory tree looking for package metadata directories."""
     found = []
     try:
         for dirpath, dirnames, _ in os.walk(root):
             dirnames[:] = [d for d in dirnames if d not in DISCOVERY_SKIP_DIRS]
             for dirname in dirnames:
-                if _is_litellm_metadata_dir(dirname):
+                if metadata_pattern.match(dirname):
                     found.append(Path(dirpath) / dirname)
+    except PermissionError:
+        logger.debug("Permission denied walking %s", root)
+    return found
+
+
+def _walk_for_node_modules(
+    root: Path, package: str,
+) -> list[Path]:
+    """Walk a directory tree looking for node_modules/{package}/."""
+    found = []
+    try:
+        for dirpath, dirnames, _ in os.walk(root):
+            dp = Path(dirpath)
+            if dp.name == "node_modules":
+                pkg_dir = dp / package
+                if pkg_dir.is_dir() and (pkg_dir / "package.json").is_file():
+                    found.append(pkg_dir)
+            dirnames[:] = [d for d in dirnames if d not in DISCOVERY_SKIP_DIRS]
     except PermissionError:
         logger.debug("Permission denied walking %s", root)
     return found
@@ -72,19 +90,33 @@ def _deduplicate_by_realpath(paths: list[Path]) -> list[Path]:
     return unique
 
 
-def find_litellm_metadata(
-    policy: PlatformPolicy, scan_path: str | None = None
+def find_package_metadata(
+    policy: PlatformPolicy,
+    ecosystem: EcosystemPlugin,
+    package: str,
+    scan_path: str | None = None,
 ) -> list[Path]:
-    """Find all litellm dist-info/egg-info directories on the system."""
+    """Find all metadata directories for the given package on the system."""
     if scan_path is not None:
         roots = [scan_path]
     else:
-        roots = _build_search_roots(policy)
+        roots = _build_search_roots(policy, ecosystem)
     found: list[Path] = []
 
-    for root in roots:
-        root_path = Path(root)
-        if root_path.is_dir():
-            found.extend(_walk_for_litellm_metadata(root_path))
+    is_npm = ecosystem.name == "npm"
+
+    if is_npm:
+        for root in roots:
+            root_path = Path(root)
+            if root_path.is_dir():
+                found.extend(_walk_for_node_modules(root_path, package))
+    else:
+        metadata_pattern = ecosystem.metadata_dir_pattern(package)
+        for root in roots:
+            root_path = Path(root)
+            if root_path.is_dir():
+                found.extend(
+                    _walk_for_metadata(root_path, metadata_pattern, package)
+                )
 
     return _deduplicate_by_realpath(found)

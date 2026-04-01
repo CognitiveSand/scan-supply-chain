@@ -1,0 +1,64 @@
+[threat]
+id          = "axios-2026-03"
+name        = "Axios npm Supply Chain Attack (BlueNoroff / UNC1069)"
+date        = "2026-03-31"
+ecosystem   = "npm"
+package     = "axios"
+compromised = ["1.14.1", "0.30.4"]
+safe        = "1.14.0"
+advisory    = "https://github.com/advisories/GHSA-fw8c-xr5c-95f9"
+description = """\
+Nation-state account takeover (attributed to DPRK BlueNoroff) deploying \
+cross-platform RAT via phantom dependency plain-crypto-js@4.2.1. \
+Postinstall hook used double-layer obfuscation (reversed Base64 + XOR) \
+to drop platform-specific RAT payloads. Self-deleting dropper."""
+
+# ── C2 Infrastructure ───────────────────────────────────────────
+[c2]
+domains = ["sfrclak.com"]
+ports   = [8000]
+
+[c2.ips]
+"sfrclak.com" = ["142.11.206.73"]
+
+# ── IOC: Files to walk-search across filesystem ─────────────────
+# No walk-search files -- the dropper (setup.js) self-deletes
+
+# ── IOC: Known paths (per-platform) ─────────────────────────────
+[[ioc.known_paths]]
+description = "RAT payload"
+linux       = ["/tmp/ld.py"]
+darwin      = ["/Library/Caches/com.apple.act.mond"]
+windows     = ['%PROGRAMDATA%\wt.exe']
+
+# ── IOC: Phantom dependencies ───────────────────────────────────
+[ioc.phantom_deps]
+names = ["plain-crypto-js"]
+
+# ── IOC: Kubernetes ──────────────────────────────────────────────
+[ioc.kubernetes]
+pod_patterns = []
+namespace    = ""
+
+# ── IOC: Windows-specific ────────────────────────────────────────
+[ioc.windows]
+registry_keywords = []
+schtask_keywords  = []
+
+# ── Remediation ──────────────────────────────────────────────────
+[remediation]
+rotate_secrets  = true
+install_command = "npm install axios@1.14.0"
+
+[remediation.remove_artifacts]
+linux   = ["Remove /tmp/ld.py"]
+darwin  = ["Remove /Library/Caches/com.apple.act.mond"]
+windows = ['Remove %PROGRAMDATA%\wt.exe']
+
+[remediation.check_persistence]
+linux   = ["ps aux | grep ld.py",
+           "crontab -l | grep suspicious entries"]
+darwin  = ["ps aux | grep com.apple.act.mond",
+           "launchctl list | grep apple.act"]
+windows = ["tasklist | findstr wt.exe",
+           'Check %PROGRAMDATA% for wt.exe']

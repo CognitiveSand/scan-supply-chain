@@ -1,71 +1,49 @@
-"""Phase 2: Check litellm versions from discovered metadata directories."""
+"""Phase 2: Check package versions from discovered metadata directories."""
+
+from __future__ import annotations
 
 import logging
-import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from .config import DIST_INFO_PATTERN, EGG_INFO_PATTERN
 from .formatting import BOLD, GREEN, RED, RESET
 from .models import Installation, ScanResults
 
+if TYPE_CHECKING:
+    from .ecosystem_base import EcosystemPlugin
+    from .threat_profile import ThreatProfile
+
 logger = logging.getLogger(__name__)
 
-_METADATA_VERSION_RE = re.compile(r"^Version:\s*(.+)$", re.MULTILINE)
 
-
-def _read_version_from_file(metadata_file: Path) -> str | None:
-    """Read the Version field from a METADATA or PKG-INFO file."""
-    try:
-        text = metadata_file.read_text(errors="ignore")
-    except (PermissionError, OSError):
-        logger.debug("Cannot read %s", metadata_file)
-        return None
-
-    match = _METADATA_VERSION_RE.search(text)
-    return match.group(1).strip() if match else None
-
-
-def _extract_version(metadata_dir: Path) -> str | None:
-    """Extract litellm version from a dist-info or egg-info directory.
-
-    Tries METADATA file first, then PKG-INFO, then falls back to
-    parsing the version from the directory name.
-    """
-    for filename in ("METADATA", "PKG-INFO"):
-        candidate = metadata_dir / filename
-        if candidate.is_file():
-            version = _read_version_from_file(candidate)
-            if version:
-                return version
-
-    # Fallback: parse version from directory name
-    for pattern in (DIST_INFO_PATTERN, EGG_INFO_PATTERN):
-        match = pattern.match(metadata_dir.name)
-        if match:
-            return match.group(1)
-
-    return None
-
-
-def _report_installation(installation: Installation) -> None:
+def _report_installation(
+    installation: Installation,
+    package: str,
+    compromised: frozenset[str],
+) -> None:
     """Print a single installation's status."""
-    if installation.is_compromised:
+    if installation.version in compromised:
         print(
             f"  {RED}{BOLD}! COMPROMISED{RESET}  "
-            f"litellm=={installation.version}  ->  {installation.env_path}"
+            f"{package}=={installation.version}  ->  {installation.env_path}"
         )
     else:
         print(
             f"  {GREEN}+ clean{RESET}        "
-            f"litellm=={installation.version}  ->  {installation.env_path}"
+            f"{package}=={installation.version}  ->  {installation.env_path}"
         )
 
 
-def scan_environments(metadata_dirs: list[Path], results: ScanResults) -> None:
-    """Check each discovered metadata directory for litellm version."""
+def scan_environments(
+    metadata_dirs: list[Path],
+    results: ScanResults,
+    ecosystem: EcosystemPlugin,
+    threat: ThreatProfile,
+) -> None:
+    """Check each discovered metadata directory for package version."""
     for metadata_dir in metadata_dirs:
         results.envs_scanned += 1
-        version = _extract_version(metadata_dir)
+        version = ecosystem.extract_version(metadata_dir)
         if version is None:
             logger.debug("Could not determine version from %s", metadata_dir)
             continue
@@ -74,10 +52,10 @@ def scan_environments(metadata_dirs: list[Path], results: ScanResults) -> None:
             env_path=str(metadata_dir), version=version
         )
         results.installations.append(installation)
-        _report_installation(installation)
+        _report_installation(installation, threat.package, threat.compromised)
 
     if not results.installations:
         print(
-            f"  {GREEN}No litellm installations found "
+            f"  {GREEN}No {threat.package} installations found "
             f"in {results.envs_scanned} locations.{RESET}"
         )

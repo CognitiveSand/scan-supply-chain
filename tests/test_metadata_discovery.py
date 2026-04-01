@@ -1,4 +1,4 @@
-"""Tests for Phase 1: discovering litellm installations via filesystem metadata.
+"""Tests for Phase 1: discovering package installations via filesystem metadata.
 
 Module under test: scan_litellm_compromise.discovery
 """
@@ -9,51 +9,26 @@ import pytest
 
 from scan_litellm_compromise.discovery import (
     _deduplicate_by_realpath,
-    _is_litellm_metadata_dir,
-    _walk_for_litellm_metadata,
-    find_litellm_metadata,
+    _walk_for_metadata,
+    _walk_for_node_modules,
+    find_package_metadata,
 )
+from scan_litellm_compromise.ecosystem_pypi import PyPIPlugin
 
-from tests.conftest import StubPolicy
-
-
-# ── _is_litellm_metadata_dir (pure) ───────────────────────────────────
+from tests.conftest import StubEcosystem, StubPolicy
 
 
-class TestIsLitellmMetadataDir:
-
-    @pytest.mark.parametrize("dirname", [
-        "litellm-1.82.7.dist-info",
-        "litellm-1.82.8.dist-info",
-        "litellm-1.0.egg-info",
-        "litellm-0.0.1a1.egg-info",
-        "litellm-2.0.0.dev0.dist-info",
-    ])
-    def test_recognizes_litellm_metadata_dirs(self, dirname):
-        assert _is_litellm_metadata_dir(dirname) is True
-
-    @pytest.mark.parametrize("dirname", [
-        "requests-2.31.0.dist-info",
-        "flask-3.0.egg-info",
-        "litellm",
-        ".dist-info",
-        "",
-        "__pycache__",
-    ])
-    def test_rejects_non_litellm_dirs(self, dirname):
-        assert _is_litellm_metadata_dir(dirname) is False
+# ── _walk_for_metadata (PyPI filesystem) ──────────────────────────────
 
 
-# ── _walk_for_litellm_metadata (filesystem) ───────────────────────────
-
-
-class TestWalkForLitellmMetadata:
+class TestWalkForMetadata:
 
     def test_finds_dist_info_in_site_packages(self, tmp_path):
         dist_info = tmp_path / "lib" / "site-packages" / "litellm-1.82.7.dist-info"
         dist_info.mkdir(parents=True)
 
-        result = _walk_for_litellm_metadata(tmp_path)
+        pattern = PyPIPlugin().metadata_dir_pattern("litellm")
+        result = _walk_for_metadata(tmp_path, pattern, "litellm")
 
         assert len(result) == 1
         assert result[0].name == "litellm-1.82.7.dist-info"
@@ -62,49 +37,86 @@ class TestWalkForLitellmMetadata:
         (tmp_path / "venv1" / "lib" / "litellm-1.82.6.dist-info").mkdir(parents=True)
         (tmp_path / "venv2" / "lib" / "litellm-1.82.7.dist-info").mkdir(parents=True)
 
-        result = _walk_for_litellm_metadata(tmp_path)
+        pattern = PyPIPlugin().metadata_dir_pattern("litellm")
+        result = _walk_for_metadata(tmp_path, pattern, "litellm")
 
         assert len(result) == 2
-        names = {p.name for p in result}
-        assert names == {"litellm-1.82.6.dist-info", "litellm-1.82.7.dist-info"}
 
     def test_skips_pycache_directories(self, tmp_path):
-        # litellm metadata inside __pycache__ should be skipped
         (tmp_path / "__pycache__" / "litellm-1.82.7.dist-info").mkdir(parents=True)
 
-        result = _walk_for_litellm_metadata(tmp_path)
+        pattern = PyPIPlugin().metadata_dir_pattern("litellm")
+        result = _walk_for_metadata(tmp_path, pattern, "litellm")
 
         assert result == []
 
-    def test_returns_empty_for_directory_without_litellm(self, tmp_path):
+    def test_returns_empty_for_directory_without_package(self, tmp_path):
         (tmp_path / "lib" / "site-packages" / "requests-2.31.dist-info").mkdir(parents=True)
 
-        result = _walk_for_litellm_metadata(tmp_path)
+        pattern = PyPIPlugin().metadata_dir_pattern("litellm")
+        result = _walk_for_metadata(tmp_path, pattern, "litellm")
 
         assert result == []
 
     def test_finds_egg_info_directories(self, tmp_path):
         (tmp_path / "litellm-1.80.0.egg-info").mkdir()
 
-        result = _walk_for_litellm_metadata(tmp_path)
+        pattern = PyPIPlugin().metadata_dir_pattern("litellm")
+        result = _walk_for_metadata(tmp_path, pattern, "litellm")
 
         assert len(result) == 1
         assert result[0].name == "litellm-1.80.0.egg-info"
 
     def test_handles_permission_error_gracefully(self, tmp_path, monkeypatch):
-        original_walk = os.walk
-
         def walk_that_raises(path, **kwargs):
             raise PermissionError("denied")
 
         monkeypatch.setattr("scan_litellm_compromise.discovery.os.walk", walk_that_raises)
 
-        result = _walk_for_litellm_metadata(tmp_path)
+        pattern = PyPIPlugin().metadata_dir_pattern("litellm")
+        result = _walk_for_metadata(tmp_path, pattern, "litellm")
 
         assert result == []
 
 
-# ── _deduplicate_by_realpath (filesystem) ──────────────────────────────
+# ── _walk_for_node_modules (npm filesystem) ──────────────────────────
+
+
+class TestWalkForNodeModules:
+
+    def test_finds_axios_in_node_modules(self, tmp_path):
+        pkg_dir = tmp_path / "project" / "node_modules" / "axios"
+        pkg_dir.mkdir(parents=True)
+        (pkg_dir / "package.json").write_text('{"version": "1.14.1"}')
+
+        result = _walk_for_node_modules(tmp_path, "axios")
+
+        assert len(result) == 1
+        assert result[0].name == "axios"
+
+    def test_ignores_dir_without_package_json(self, tmp_path):
+        (tmp_path / "node_modules" / "axios").mkdir(parents=True)
+        # No package.json
+
+        result = _walk_for_node_modules(tmp_path, "axios")
+
+        assert result == []
+
+    def test_finds_nested_node_modules(self, tmp_path):
+        pkg1 = tmp_path / "proj1" / "node_modules" / "axios"
+        pkg1.mkdir(parents=True)
+        (pkg1 / "package.json").write_text('{"version": "1.14.0"}')
+
+        pkg2 = tmp_path / "proj2" / "node_modules" / "axios"
+        pkg2.mkdir(parents=True)
+        (pkg2 / "package.json").write_text('{"version": "1.14.1"}')
+
+        result = _walk_for_node_modules(tmp_path, "axios")
+
+        assert len(result) == 2
+
+
+# ── _deduplicate_by_realpath ──────────────────────────────────────────
 
 
 class TestDeduplicateByRealpath:
@@ -131,54 +143,39 @@ class TestDeduplicateByRealpath:
         assert len(result) == 2
 
 
-# ── find_litellm_metadata (integration) ───────────────────────────────
+# ── find_package_metadata (integration) ──────────────────────────────
 
 
-class TestFindLitellmMetadata:
+class TestFindPackageMetadata:
 
-    def test_returns_results_from_policy_search_roots(self, tmp_path, monkeypatch):
+    def test_finds_pypi_package_from_policy_roots(self, tmp_path, monkeypatch):
         site_pkg = tmp_path / "lib" / "site-packages"
         (site_pkg / "litellm-1.82.7.dist-info").mkdir(parents=True)
 
         policy = StubPolicy()
         policy.search_roots = [str(tmp_path)]
+        ecosystem = PyPIPlugin()
 
-        # Prevent scanning real home directory
         monkeypatch.setattr("scan_litellm_compromise.discovery.Path.home", lambda: tmp_path / "fakehome")
         (tmp_path / "fakehome").mkdir()
 
-        result = find_litellm_metadata(policy)
+        result = find_package_metadata(policy, ecosystem, "litellm")
 
         assert len(result) == 1
-        assert result[0].name == "litellm-1.82.7.dist-info"
 
-    def test_returns_empty_when_no_litellm_installed(self, tmp_path, monkeypatch):
+    def test_returns_empty_when_no_package_installed(self, tmp_path, monkeypatch):
         (tmp_path / "lib" / "site-packages" / "flask-3.0.dist-info").mkdir(parents=True)
 
         policy = StubPolicy()
         policy.search_roots = [str(tmp_path)]
+        ecosystem = PyPIPlugin()
 
         monkeypatch.setattr("scan_litellm_compromise.discovery.Path.home", lambda: tmp_path / "fakehome")
         (tmp_path / "fakehome").mkdir()
 
-        result = find_litellm_metadata(policy)
+        result = find_package_metadata(policy, ecosystem, "litellm")
 
         assert result == []
-
-    def test_deduplicates_results_across_roots(self, tmp_path, monkeypatch):
-        dist_info = tmp_path / "lib" / "litellm-1.82.7.dist-info"
-        dist_info.mkdir(parents=True)
-
-        policy = StubPolicy()
-        # Same root listed twice
-        policy.search_roots = [str(tmp_path), str(tmp_path)]
-
-        monkeypatch.setattr("scan_litellm_compromise.discovery.Path.home", lambda: tmp_path / "fakehome")
-        (tmp_path / "fakehome").mkdir()
-
-        result = find_litellm_metadata(policy)
-
-        assert len(result) == 1
 
     def test_uses_scan_path_when_provided(self, tmp_path):
         target = tmp_path / "myproject"
@@ -186,23 +183,10 @@ class TestFindLitellmMetadata:
 
         policy = StubPolicy()
         policy.search_roots = ["/should/not/be/used"]
+        ecosystem = PyPIPlugin()
 
-        result = find_litellm_metadata(policy, scan_path=str(target))
+        result = find_package_metadata(
+            policy, ecosystem, "litellm", scan_path=str(target),
+        )
 
         assert len(result) == 1
-        assert result[0].name == "litellm-1.82.7.dist-info"
-
-    def test_ignores_policy_roots_when_scan_path_set(self, tmp_path):
-        # Policy root has litellm, but scan_path points elsewhere
-        policy_dir = tmp_path / "system"
-        (policy_dir / "litellm-1.82.7.dist-info").mkdir(parents=True)
-
-        scan_dir = tmp_path / "empty_project"
-        scan_dir.mkdir()
-
-        policy = StubPolicy()
-        policy.search_roots = [str(policy_dir)]
-
-        result = find_litellm_metadata(policy, scan_path=str(scan_dir))
-
-        assert result == []

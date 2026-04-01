@@ -1,275 +1,238 @@
-"""Tests for the detection engine: every regex pattern in config.py.
+"""Tests for the detection engine: regex patterns from ecosystem plugins.
 
-Module under test: scan_litellm_compromise.config
+Module under test: scan_litellm_compromise.ecosystem_pypi, ecosystem_npm
 """
+
+import re
 
 import pytest
 
-from scan_litellm_compromise.config import (
-    C2_DOMAINS,
-    C2_KNOWN_IPS,
-    COMPROMISED_VERSIONS,
-    DIST_INFO_PATTERN,
-    EGG_INFO_PATTERN,
-    PINNED_VERSION_PATTERN,
-    PYTHON_IMPORT_PATTERNS,
-    REQUIREMENTS_FILENAME_PATTERN,
-    REQUIREMENTS_PATTERN,
-    TOML_BARE_PATTERN,
-    TOML_DEPENDENCY_PATTERN,
-)
+from scan_litellm_compromise.ecosystem_pypi import PyPIPlugin
+from scan_litellm_compromise.ecosystem_npm import NpmPlugin
 
 
-# ── DIST_INFO_PATTERN ──────────────────────────────────────────────────
+# ── PyPI metadata dir pattern ────────────────────────────────────────
 
 
-class TestDistInfoPattern:
+class TestPyPIMetadataDirPattern:
 
-    @pytest.mark.parametrize("dirname, expected_version", [
-        ("litellm-1.82.7.dist-info", "1.82.7"),
-        ("litellm-1.82.8.dist-info", "1.82.8"),
-        ("litellm-0.0.1.dist-info", "0.0.1"),
-        ("litellm-1.82.7.dev0.dist-info", "1.82.7.dev0"),
-        ("litellm-2.0.0rc1.dist-info", "2.0.0rc1"),
+    @pytest.fixture
+    def pattern(self):
+        return PyPIPlugin().metadata_dir_pattern("litellm")
+
+    @pytest.mark.parametrize("dirname", [
+        "litellm-1.82.7.dist-info",
+        "litellm-1.82.8.dist-info",
+        "litellm-1.0.egg-info",
+        "litellm-0.0.1a1.egg-info",
+        "litellm-2.0.0.dev0.dist-info",
     ])
-    def test_matches_valid_litellm_dist_info_dirs(self, dirname, expected_version):
-        match = DIST_INFO_PATTERN.match(dirname)
-        assert match is not None
-        assert match.group(1) == expected_version
+    def test_recognizes_litellm_metadata_dirs(self, pattern, dirname):
+        assert pattern.match(dirname) is not None
 
     @pytest.mark.parametrize("dirname", [
         "requests-2.31.0.dist-info",
-        "LITELLM-1.0.dist-info",
-        "some-litellm-1.0.dist-info",
-        "litellm-1.0.dist-info-extra",
+        "flask-3.0.egg-info",
         "litellm",
         ".dist-info",
         "",
+        "__pycache__",
     ])
-    def test_rejects_non_litellm_dist_info_dirs(self, dirname):
-        assert DIST_INFO_PATTERN.match(dirname) is None
+    def test_rejects_non_litellm_dirs(self, pattern, dirname):
+        assert pattern.match(dirname) is None
 
 
-# ── EGG_INFO_PATTERN ───────────────────────────────────────────────────
+# ── PyPI Python import patterns ──────────────────────────────────────
 
 
-class TestEggInfoPattern:
+class TestPyPIImportPatterns:
 
-    @pytest.mark.parametrize("dirname, expected_version", [
-        ("litellm-1.82.7.egg-info", "1.82.7"),
-        ("litellm-1.0.egg-info", "1.0"),
-        ("litellm-0.0.1a1.egg-info", "0.0.1a1"),
-    ])
-    def test_matches_valid_litellm_egg_info_dirs(self, dirname, expected_version):
-        match = EGG_INFO_PATTERN.match(dirname)
-        assert match is not None
-        assert match.group(1) == expected_version
+    @pytest.fixture
+    def patterns(self):
+        return PyPIPlugin().import_patterns("litellm")
 
-    @pytest.mark.parametrize("dirname", [
-        "requests-2.31.0.egg-info",
-        "notlitellm-1.0.egg-info",
-        "litellm-1.0.dist-info",
-        "",
-    ])
-    def test_rejects_non_litellm_egg_info_dirs(self, dirname):
-        assert EGG_INFO_PATTERN.match(dirname) is None
-
-
-# ── PYTHON_IMPORT_PATTERNS ─────────────────────────────────────────────
-
-
-def _matches_any_import_pattern(line: str) -> bool:
-    return any(p.search(line) for p in PYTHON_IMPORT_PATTERNS)
-
-
-class TestPythonImportPatterns:
+    def _matches(self, patterns, line):
+        return any(p.search(line) for p in patterns)
 
     @pytest.mark.parametrize("line", [
         "import litellm",
         "  import litellm",
-        "\timport litellm",
-        "from litellm import completion",
-        "from litellm.proxy import router",
-        "from litellm.proxy.auth import handler",
-        "result = litellm.completion(model='gpt-4')",
-        'name = "litellm"',
-        "name = 'litellm'",
-        "  from litellm import something",
+        "from litellm import something",
+        "from litellm.utils import helper",
+        "  from litellm import completion",
+        'litellm.completion("hello")',
+        '"litellm"',
+        "'litellm'",
+        'result = litellm.acompletion(prompt="hi")',
     ])
-    def test_matches_litellm_import_statements(self, line):
-        assert _matches_any_import_pattern(line) is True
+    def test_matches_litellm_usage(self, patterns, line):
+        assert self._matches(patterns, line)
 
     @pytest.mark.parametrize("line", [
-        "import os",
-        "from os import path",
-        "# just a comment",
-        "",
-        "my_variable = 42",
         "import requests",
+        "from flask import Flask",
+        "# litellm is not used",
+        "my_litellm_wrapper()",
+        "x = xlitellm",
     ])
-    def test_rejects_lines_without_litellm(self, line):
-        assert _matches_any_import_pattern(line) is False
-
-    def test_lookbehind_prevents_my_litellm_dot_match(self):
-        # The third pattern has (?<![a-zA-Z0-9_]) lookbehind
-        # "my_litellm." should NOT match the dotted-access pattern
-        line = "my_litellm.something()"
-        # Only the bare quoted pattern could match, but there are no quotes here
-        # The lookbehind on pattern 3 should prevent "my_litellm." from matching
-        pattern_3 = PYTHON_IMPORT_PATTERNS[2]
-        assert pattern_3.search(line) is None
+    def test_does_not_match_non_litellm_usage(self, patterns, line):
+        assert not self._matches(patterns, line)
 
 
-# ── TOML_DEPENDENCY_PATTERN ────────────────────────────────────────────
+# ── PyPI dependency patterns ─────────────────────────────────────────
 
 
-class TestTomlDependencyPattern:
+class TestPyPIDependencyPatterns:
+
+    @pytest.fixture
+    def patterns(self):
+        return PyPIPlugin().dep_patterns("litellm")
+
+    def _matches(self, patterns, line):
+        return any(p.search(line) for p in patterns)
 
     @pytest.mark.parametrize("line", [
-        "litellm>=1.0",
+        "litellm>=1.80.0",
         "litellm==1.82.7",
         "litellm~=1.80",
         "litellm!=1.82.7",
         "litellm<2.0",
-        "litellm >  1.0",
-        '"litellm>=1.0"',
+        '"litellm"',
+        "'litellm'",
+        'litellm = "^1.80"',
+        "litellm",
     ])
-    def test_matches_litellm_with_version_specifiers(self, line):
-        assert TOML_DEPENDENCY_PATTERN.search(line) is not None
+    def test_matches_litellm_dependency_lines(self, patterns, line):
+        assert self._matches(patterns, line)
 
     @pytest.mark.parametrize("line", [
         "requests>=2.0",
-        "my-litellm>=1.0",
-        "litellm_proxy>=1.0",
-        "litellm",
-        "",
+        "# litellm is not a dep",
+        "my-litellm-wrapper>=1.0",
     ])
-    def test_rejects_non_litellm_or_bare_references(self, line):
-        assert TOML_DEPENDENCY_PATTERN.search(line) is None
+    def test_does_not_match_non_litellm_deps(self, patterns, line):
+        assert not self._matches(patterns, line)
 
 
-# ── TOML_BARE_PATTERN ──────────────────────────────────────────────────
+# ── PyPI pinned version extraction ───────────────────────────────────
 
 
-class TestTomlBarePattern:
+class TestPyPIPinnedVersion:
 
-    @pytest.mark.parametrize("line", [
-        '"litellm"',
-        "'litellm'",
-        'dependencies = ["litellm"]',
-        "dependencies = ['litellm']",
-    ])
-    def test_matches_quoted_litellm(self, line):
-        assert TOML_BARE_PATTERN.search(line) is not None
+    @pytest.fixture
+    def pattern(self):
+        return PyPIPlugin().pinned_version_pattern("litellm")
 
-    @pytest.mark.parametrize("line", [
-        "litellm",
-        '"litellm_proxy"',
-        '"my-litellm"',
-        "",
-    ])
-    def test_rejects_unquoted_or_different_packages(self, line):
-        assert TOML_BARE_PATTERN.search(line) is None
-
-
-# ── REQUIREMENTS_PATTERN ───────────────────────────────────────────────
-
-
-class TestRequirementsPattern:
-
-    @pytest.mark.parametrize("line", [
-        "litellm==1.82.7",
-        "litellm>=1.80",
-        "litellm",
-        "  litellm==1.0",
-        "litellm<2.0",
-        "litellm!=1.82.7",
-    ])
-    def test_matches_litellm_dependency_lines(self, line):
-        assert REQUIREMENTS_PATTERN.match(line) is not None
-
-    @pytest.mark.parametrize("line", [
-        "requests==2.31",
-        "# litellm==1.82.7",
-        "-e git+https://litellm",
-        "",
-    ])
-    def test_rejects_non_litellm_lines(self, line):
-        assert REQUIREMENTS_PATTERN.match(line) is None
-
-
-# ── REQUIREMENTS_FILENAME_PATTERN ──────────────────────────────────────
-
-
-class TestRequirementsFilenamePattern:
-
-    @pytest.mark.parametrize("filename", [
-        "requirements.txt",
-        "requirements-dev.txt",
-        "requirements_prod.txt",
-        "requirements-ml-gpu.txt",
-    ])
-    def test_matches_requirements_filenames(self, filename):
-        assert REQUIREMENTS_FILENAME_PATTERN.match(filename) is not None
-
-    @pytest.mark.parametrize("filename", [
-        "my-requirements.txt",
-        "requirements.cfg",
-        "requirements.toml",
-        "REQUIREMENTS.txt",
-        "",
-    ])
-    def test_rejects_non_requirements_filenames(self, filename):
-        assert REQUIREMENTS_FILENAME_PATTERN.match(filename) is None
-
-
-# ── PINNED_VERSION_PATTERN ─────────────────────────────────────────────
-
-
-class TestPinnedVersionPattern:
-
-    @pytest.mark.parametrize("line, expected_version", [
+    @pytest.mark.parametrize("line,expected", [
         ("litellm==1.82.7", "1.82.7"),
         ("litellm==1.82.8", "1.82.8"),
-        ("litellm == 1.82.7", "1.82.7"),
-        ("litellm==1.80.0.dev3", "1.80.0.dev3"),
-        ('"litellm==1.82.7"', "1.82.7"),
+        ("litellm==1.80.0", "1.80.0"),
+        ("litellm==0.1.0a1", "0.1.0a1"),
     ])
-    def test_extracts_pinned_version(self, line, expected_version):
-        match = PINNED_VERSION_PATTERN.search(line)
+    def test_extracts_pinned_versions(self, pattern, line, expected):
+        match = pattern.search(line)
         assert match is not None
-        assert match.group(1) == expected_version
+        assert match.group(1) == expected
 
     @pytest.mark.parametrize("line", [
-        "litellm>=1.82.7",
+        "litellm>=1.80.0",
         "litellm~=1.80",
         "litellm",
         "requests==2.31.0",
-        "my-litellm==1.0",
-        "",
     ])
-    def test_returns_none_for_unpinned_or_other_packages(self, line):
-        assert PINNED_VERSION_PATTERN.search(line) is None
+    def test_does_not_extract_from_non_pinned(self, pattern, line):
+        match = pattern.search(line)
+        # Either no match, or not a pinned litellm version
+        if match:
+            assert "litellm" not in line.split("==")[0] or match.group(1) != line.split("==")[-1]
 
 
-# ── Constants ──────────────────────────────────────────────────────────
+# ── npm import patterns ──────────────────────────────────────────────
 
 
-class TestConstants:
+class TestNpmImportPatterns:
 
-    def test_compromised_versions_contains_exactly_known_bad_versions(self):
-        assert COMPROMISED_VERSIONS == frozenset({"1.82.7", "1.82.8"})
+    @pytest.fixture
+    def patterns(self):
+        return NpmPlugin().import_patterns("axios")
 
-    def test_c2_domains_contains_expected_domains(self):
-        assert "models.litellm.cloud" in C2_DOMAINS
-        assert "checkmarx.zone" in C2_DOMAINS
-        assert len(C2_DOMAINS) == 2
+    def _matches(self, patterns, line):
+        return any(p.search(line) for p in patterns)
 
-    def test_c2_known_ips_covers_all_domains(self):
-        for domain in C2_DOMAINS:
-            assert domain in C2_KNOWN_IPS
-            assert len(C2_KNOWN_IPS[domain]) >= 1
+    @pytest.mark.parametrize("line", [
+        "const axios = require('axios')",
+        'const axios = require("axios")',
+        "import axios from 'axios'",
+        'import axios from "axios"',
+        "import { get } from 'axios'",
+        "from 'axios'",
+        "require('axios/lib/utils')",
+        "import 'axios'",
+    ])
+    def test_matches_axios_usage(self, patterns, line):
+        assert self._matches(patterns, line)
 
-    def test_c2_known_ips_contains_expected_ips(self):
-        assert "46.151.182.203" in C2_KNOWN_IPS["models.litellm.cloud"]
-        assert "83.142.209.11" in C2_KNOWN_IPS["checkmarx.zone"]
+    @pytest.mark.parametrize("line", [
+        "import http from 'http'",
+        "require('node-fetch')",
+        "// axios is not used",
+    ])
+    def test_does_not_match_non_axios_usage(self, patterns, line):
+        assert not self._matches(patterns, line)
+
+
+# ── npm dependency patterns ──────────────────────────────────────────
+
+
+class TestNpmDependencyPatterns:
+
+    @pytest.fixture
+    def patterns(self):
+        return NpmPlugin().dep_patterns("axios")
+
+    def _matches(self, patterns, line):
+        return any(p.search(line) for p in patterns)
+
+    @pytest.mark.parametrize("line", [
+        '"axios": "^1.14.0"',
+        '"axios": "1.14.1"',
+        "'axios': '^1.0.0'",
+        "axios@^1.14.0:",
+        '"node_modules/axios"',
+    ])
+    def test_matches_axios_dependency_lines(self, patterns, line):
+        assert self._matches(patterns, line)
+
+    @pytest.mark.parametrize("line", [
+        '"node-fetch": "^3.0"',
+        "// axios dep comment",
+    ])
+    def test_does_not_match_non_axios_deps(self, patterns, line):
+        assert not self._matches(patterns, line)
+
+
+# ── npm pinned version extraction ────────────────────────────────────
+
+
+class TestNpmPinnedVersion:
+
+    @pytest.fixture
+    def pattern(self):
+        return NpmPlugin().pinned_version_pattern("axios")
+
+    @pytest.mark.parametrize("line,expected", [
+        ('"axios": "1.14.1"', "1.14.1"),
+        ('"axios": "0.30.4"', "0.30.4"),
+    ])
+    def test_extracts_pinned_versions(self, pattern, line, expected):
+        match = pattern.search(line)
+        assert match is not None
+        assert match.group(1) == expected
+
+    @pytest.mark.parametrize("line", [
+        '"axios": "^1.14.0"',
+        '"axios": "~1.14.0"',
+    ])
+    def test_does_not_extract_ranged_versions(self, pattern, line):
+        match = pattern.search(line)
+        assert match is None

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import shutil
@@ -10,7 +11,6 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterable
 
-from .config import C2_DOMAINS, C2_KNOWN_IPS
 from .formatting import (
     BOLD,
     RED,
@@ -23,7 +23,9 @@ from .formatting import (
 from .models import ScanResults
 
 if TYPE_CHECKING:
+    from .ecosystem_base import EcosystemPlugin
     from .platform_policy import PlatformPolicy
+    from .threat_profile import ThreatProfile
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +33,14 @@ logger = logging.getLogger(__name__)
 # ── DRY helper for path-based IOC checks ────────────────────────────────
 
 
+def _expand_path(raw: str) -> Path:
+    """Expand ~ and %VAR% in a path string."""
+    expanded = os.path.expanduser(os.path.expandvars(raw))
+    return Path(expanded)
+
+
 def _check_known_paths(
-    description: str, paths: Iterable[Path], results: ScanResults
+    description: str, paths: Iterable[Path], results: ScanResults,
 ) -> None:
     """Check a list of known paths for IOC artifacts."""
     print_check_header(description)
@@ -52,46 +60,66 @@ def _check_known_paths(
 # ── Individual IOC scanners ──────────────────────────────────────────────
 
 
-def _scan_for_backdoor_pth(results: ScanResults, policy: PlatformPolicy) -> None:
-    """Walk filesystem looking for litellm_init.pth auto-exec backdoor."""
-    print_check_header("litellm_init.pth (auto-exec backdoor)")
-    found = False
-    for root in policy.pth_search_roots:
-        root_path = Path(root)
-        if not root_path.is_dir():
-            continue
-        try:
-            for dirpath, _, filenames in os.walk(root_path):
-                if "litellm_init.pth" in filenames:
-                    pth_path = Path(dirpath) / "litellm_init.pth"
-                    print_ioc_found(str(pth_path))
-                    results.iocs.append(str(pth_path))
-                    found = True
-        except PermissionError:
-            logger.debug("Permission denied walking %s", root)
-    if not found:
-        print_clean()
-
-
-def _scan_for_persistence(results: ScanResults, policy: PlatformPolicy) -> None:
-    """Check for sysmon backdoor persistence."""
-    expanded = [Path(os.path.expanduser(sp)) for sp in policy.persistence_paths]
-    _check_known_paths(policy.persistence_description, expanded, results)
-
-
-def _scan_for_exfiltration_artifacts(
-    results: ScanResults, policy: PlatformPolicy
+def _scan_walk_files(
+    results: ScanResults,
+    threat: ThreatProfile,
+    policy: PlatformPolicy,
+    scan_path: str | None = None,
 ) -> None:
-    """Check temp directory for known exfiltration artifacts."""
-    tmp_paths = [Path(artifact) for artifact in policy.tmp_iocs]
-    _check_known_paths(policy.tmp_description, tmp_paths, results)
+    """Walk filesystem looking for IOC files by name (and optionally hash)."""
+    for walk_ioc in threat.walk_files:
+        print_check_header(walk_ioc.description)
+        found = False
+        target_names = set(walk_ioc.filenames)
+        known_hashes = set(walk_ioc.sha256)
+
+        roots = [scan_path] if scan_path else policy.search_roots
+        for root in roots:
+            root_path = Path(root)
+            if not root_path.is_dir():
+                continue
+            try:
+                for dirpath, _, filenames in os.walk(root_path):
+                    for fn in filenames:
+                        if fn not in target_names:
+                            continue
+                        file_path = Path(dirpath) / fn
+                        # If hashes are specified, verify
+                        if known_hashes:
+                            try:
+                                digest = hashlib.sha256(
+                                    file_path.read_bytes()
+                                ).hexdigest()
+                                if digest not in known_hashes:
+                                    continue
+                            except (PermissionError, OSError):
+                                # Can't read — still report as suspicious
+                                pass
+                        print_ioc_found(str(file_path))
+                        results.iocs.append(str(file_path))
+                        found = True
+            except PermissionError:
+                logger.debug("Permission denied walking %s", root)
+        if not found:
+            print_clean()
 
 
-def _resolve_c2_ips(resolve_dns: bool) -> dict[str, list[str]]:
+def _scan_known_paths(
+    results: ScanResults, threat: ThreatProfile,
+) -> None:
+    """Check per-platform known paths from the threat profile."""
+    for kp in threat.known_paths:
+        paths = [_expand_path(p) for p in kp.paths_for_platform()]
+        _check_known_paths(kp.description, paths, results)
+
+
+def _resolve_c2_ips(threat: ThreatProfile, resolve_dns: bool) -> dict[str, list[str]]:
     """Build domain -> IPs mapping. Uses known IPs; optionally adds live DNS."""
-    result: dict[str, list[str]] = {d: list(ips) for d, ips in C2_KNOWN_IPS.items()}
+    result: dict[str, list[str]] = {
+        d: list(ips) for d, ips in threat.c2.ips.items()
+    }
     if resolve_dns:
-        for domain in C2_DOMAINS:
+        for domain in threat.c2.domains:
             try:
                 live_ip = socket.gethostbyname(domain)
                 ips = result.setdefault(domain, [])
@@ -103,9 +131,15 @@ def _resolve_c2_ips(resolve_dns: bool) -> dict[str, list[str]]:
 
 
 def _scan_for_c2_connections(
-    results: ScanResults, policy: PlatformPolicy, resolve_c2: bool = False
+    results: ScanResults,
+    threat: ThreatProfile,
+    policy: PlatformPolicy,
+    resolve_c2: bool = False,
 ) -> None:
     """Check active network connections for C2 domain communication."""
+    if not threat.c2.domains and not threat.c2.ips:
+        return
+
     print_check_header("active network connections for C2 domains")
     if resolve_c2:
         print(
@@ -114,11 +148,13 @@ def _scan_for_c2_connections(
         )
     command = policy.network_check_command
     if command is None or not shutil.which(command[0]):
-        print_clean(f"{command[0] if command else 'network tool'} not available, skipping")
+        print_clean(
+            f"{command[0] if command else 'network tool'} not available, skipping"
+        )
         return
 
     found = False
-    domain_ips = _resolve_c2_ips(resolve_c2)
+    domain_ips = _resolve_c2_ips(threat, resolve_c2)
     try:
         socket_output = subprocess.run(
             command, capture_output=True, timeout=5
@@ -141,15 +177,18 @@ def _scan_for_c2_connections(
         print_clean("No suspicious connections")
 
 
-def _scan_for_malicious_pods(results: ScanResults) -> None:
-    """Check Kubernetes for suspicious node-setup-* pods."""
+def _scan_for_malicious_pods(results: ScanResults, threat: ThreatProfile) -> None:
+    """Check Kubernetes for suspicious pods defined in the threat profile."""
+    if not threat.kubernetes.pod_patterns:
+        return
     if not shutil.which("kubectl"):
         return
 
-    print_check_header("Kubernetes malicious pods")
+    namespace = threat.kubernetes.namespace or "kube-system"
+    print_check_header(f"Kubernetes malicious pods ({namespace})")
     try:
         kubectl_output = subprocess.run(
-            ["kubectl", "get", "pods", "-n", "kube-system", "--no-headers"],
+            ["kubectl", "get", "pods", "-n", namespace, "--no-headers"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -158,11 +197,14 @@ def _scan_for_malicious_pods(results: ScanResults) -> None:
         suspicious_pods = [
             line
             for line in kubectl_output.splitlines()
-            if line.strip().startswith("node-setup-")
+            if any(
+                line.strip().startswith(pattern)
+                for pattern in threat.kubernetes.pod_patterns
+            )
         ]
 
         if suspicious_pods:
-            print(f"  {RED}{BOLD}! SUSPICIOUS PODS in kube-system:{RESET}")
+            print(f"  {RED}{BOLD}! SUSPICIOUS PODS in {namespace}:{RESET}")
             for pod in suspicious_pods:
                 print(f"    {RED}{pod}{RESET}")
             results.iocs.append(f"k8s-pods:{len(suspicious_pods)}")
@@ -172,19 +214,73 @@ def _scan_for_malicious_pods(results: ScanResults) -> None:
         logger.debug("Failed to query Kubernetes pods")
 
 
+def _scan_phantom_deps(
+    results: ScanResults,
+    threat: ThreatProfile,
+    ecosystem: EcosystemPlugin,
+    policy: PlatformPolicy,
+    scan_path: str | None = None,
+) -> None:
+    """Check for phantom dependencies that should not exist."""
+    if not threat.phantom_deps:
+        return
+
+    roots = [scan_path] if scan_path else policy.search_roots
+    print_check_header("phantom dependencies (should not exist)")
+    found_iocs = ecosystem.find_phantom_deps(
+        threat.phantom_deps, roots,
+    )
+    if found_iocs:
+        for ioc in found_iocs:
+            print_ioc_found(ioc)
+            results.iocs.append(ioc)
+    else:
+        print_clean("No phantom dependencies found")
+
+
+def _scan_windows_extras(
+    results: ScanResults, threat: ThreatProfile,
+) -> None:
+    """Run Windows-specific IOC checks if applicable."""
+    import sys
+    if sys.platform != "win32":
+        return
+
+    registry_kw = threat.windows_ioc.registry_keywords
+    schtask_kw = threat.windows_ioc.schtask_keywords
+    if not registry_kw and not schtask_kw:
+        return
+
+    from .ioc_windows import run_windows_ioc_checks
+    run_windows_ioc_checks(results, registry_kw, schtask_kw)
+
+
 # ── Public entry point ───────────────────────────────────────────────────
 
 
 def scan_iocs(
-    results: ScanResults, policy: PlatformPolicy, resolve_c2: bool = False
+    results: ScanResults,
+    threat: ThreatProfile,
+    ecosystem: EcosystemPlugin,
+    policy: PlatformPolicy,
+    resolve_c2: bool = False,
+    scan_path: str | None = None,
 ) -> None:
-    """Run all IOC artifact scans."""
-    _scan_for_backdoor_pth(results, policy)
-    print()
-    _scan_for_persistence(results, policy)
-    print()
-    _scan_for_exfiltration_artifacts(results, policy)
-    print()
-    _scan_for_c2_connections(results, policy, resolve_c2=resolve_c2)
-    _scan_for_malicious_pods(results)
-    policy.extra_ioc_checks(results)
+    """Run all IOC artifact scans for a single threat profile."""
+    if threat.walk_files:
+        _scan_walk_files(results, threat, policy, scan_path=scan_path)
+        print()
+
+    if threat.known_paths:
+        _scan_known_paths(results, threat)
+        print()
+
+    _scan_for_c2_connections(results, threat, policy, resolve_c2=resolve_c2)
+
+    _scan_for_malicious_pods(results, threat)
+
+    _scan_phantom_deps(
+        results, threat, ecosystem, policy, scan_path=scan_path,
+    )
+
+    _scan_windows_extras(results, threat)

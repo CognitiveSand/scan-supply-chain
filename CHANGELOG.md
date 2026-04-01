@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.0 — 2026-04-01
+
+### Added
+- **Generic threat library** — Scanner is now data-driven via TOML threat profiles. Users can add custom threats by dropping `.toml` files into `~/.config/scan-supply-chain/threats/` (Linux/macOS) or `%LOCALAPPDATA%\scan-supply-chain\threats\` (Windows).
+- **npm ecosystem support** — New `NpmPlugin` discovers packages in `node_modules/`, reads `package.json` versions, matches JS/TS import patterns (`require()`, `import`), and detects phantom dependencies.
+- **Axios threat profile** (`axios-2026-03.toml`) — Detects the March 31, 2026 axios npm supply chain attack (BlueNoroff/UNC1069): compromised versions 1.14.1 and 0.30.4, phantom dependency `plain-crypto-js`, cross-platform RAT payloads, C2 at `sfrclak.com`.
+- **Multi-threat scanning** — `--all` is the default; the scanner checks all known threats in a single run with per-threat reports.
+- **`--threat ID`** — Scan for a specific threat only.
+- **`--threat-file PATH`** — Load a custom threat profile from a TOML file.
+- **`--list-threats`** — List all available threat profiles.
+- **Phantom dependency detection** — Finds npm/PyPI packages that should not exist (e.g., `plain-crypto-js` injected by the axios attack).
+- **SHA-256 hash verification** — Walk-file IOCs can optionally specify SHA-256 hashes to reduce false positives.
+
+### Changed
+- **Architecture refactored** — Three orthogonal axes: Platform (OS) × Ecosystem (PyPI/npm) × Threat (TOML profile). All attack-specific constants moved from code to threat profiles.
+- **PlatformPolicy slimmed** — IOC paths, persistence paths, and remediation steps moved to threat profiles. Platform policies now contain only OS infrastructure (search roots, network commands).
+- **`config.py` simplified** — Only generic skip-dir constants remain; all package-specific patterns removed.
+- **`models.py` decoupled** — `ScanResults` accepts `compromised_versions` parameter instead of importing hardcoded constants.
+- **Requires Python >= 3.11** (was >= 3.10) — Uses `tomllib` from the standard library for zero-dependency TOML parsing.
+- **Test suite updated** — 230 tests covering both PyPI and npm ecosystems, threat profile loading, and multi-threat scanning.
+
 ## 0.3.2 — 2026-03-29
 
 ### Fixed

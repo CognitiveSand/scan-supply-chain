@@ -8,15 +8,23 @@ from typing import Protocol
 
 
 class PlatformPolicy(Protocol):
-    """Defines what the scanner needs from the OS.
+    """OS-specific infrastructure the scanner needs.
 
-    Two concrete implementations exist: LinuxPolicy and WindowsPolicy.
-    The orchestrator constructs one at startup and passes it down.
+    Threat-specific IOC paths and remediation steps are NOT here —
+    they live in the ThreatProfile loaded from TOML.
     """
 
     @property
     def name(self) -> str:
         """Human-readable platform name (e.g. 'Linux', 'Windows')."""
+        ...
+
+    @property
+    def platform_key(self) -> str:
+        """Key used to select per-platform values from threat profiles.
+
+        One of: 'linux', 'darwin', 'windows'.
+        """
         ...
 
     @property
@@ -27,31 +35,6 @@ class PlatformPolicy(Protocol):
     @property
     def conda_globs(self) -> list[str]:
         """Glob patterns for system-wide conda installations."""
-        ...
-
-    @property
-    def persistence_paths(self) -> list[str]:
-        """Paths where the sysmon backdoor may be installed."""
-        ...
-
-    @property
-    def persistence_description(self) -> str:
-        """Label for the persistence mechanism (e.g. 'systemd backdoor')."""
-        ...
-
-    @property
-    def tmp_iocs(self) -> list[str]:
-        """Paths to temporary exfiltration artifacts."""
-        ...
-
-    @property
-    def tmp_description(self) -> str:
-        """Label for the temp artifacts location."""
-        ...
-
-    @property
-    def pth_search_roots(self) -> list[str]:
-        """Directories to walk when searching for litellm_init.pth."""
         ...
 
     @property
@@ -70,18 +53,6 @@ class PlatformPolicy(Protocol):
 
     def home_pipx_dir(self) -> Path | None:
         """Path to pipx virtual envs directory, or None."""
-        ...
-
-    def extra_ioc_checks(self, results: object) -> None:
-        """Run platform-specific IOC checks beyond the common ones."""
-        ...
-
-    def remediation_persistence_steps(self) -> list[str]:
-        """Platform-specific steps to check/remove persistence mechanisms."""
-        ...
-
-    def remediation_artifact_lines(self) -> list[str]:
-        """Platform-specific lines describing which artifacts to remove."""
         ...
 
 

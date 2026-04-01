@@ -1,4 +1,4 @@
-"""Windows-only IOC checks: Registry Run keys, Scheduled Tasks, Startup folder."""
+"""Windows-only IOC checks: Registry Run keys, Scheduled Tasks."""
 
 import logging
 import subprocess
@@ -9,16 +9,17 @@ from .formatting import (
     RESET,
     print_check_header,
     print_clean,
-    print_ioc_found,
 )
 
 logger = logging.getLogger(__name__)
 
-_SUSPICIOUS_KEYWORDS = ("sysmon", "litellm", "system telemetry")
 
-
-def _check_registry_run_keys(results) -> None:
-    """Check HKCU and HKLM Run keys for sysmon/litellm entries."""
+def _check_registry_run_keys(
+    results, keywords: list[str],
+) -> None:
+    """Check HKCU and HKLM Run keys for suspicious entries."""
+    if not keywords:
+        return
     print_check_header("Registry Run keys for persistence")
     found = False
     run_keys = [
@@ -33,8 +34,8 @@ def _check_registry_run_keys(results) -> None:
                 text=True,
                 timeout=10,
             ).stdout.lower()
-            for keyword in _SUSPICIOUS_KEYWORDS:
-                if keyword in output:
+            for keyword in keywords:
+                if keyword.lower() in output:
                     print(
                         f"  {RED}{BOLD}! SUSPICIOUS REGISTRY ENTRY "
                         f"in {key_path} (matched: {keyword}){RESET}"
@@ -47,8 +48,12 @@ def _check_registry_run_keys(results) -> None:
         print_clean("No suspicious Run key entries")
 
 
-def _check_scheduled_tasks(results) -> None:
-    """Check Task Scheduler for sysmon/litellm tasks."""
+def _check_scheduled_tasks(
+    results, keywords: list[str],
+) -> None:
+    """Check Task Scheduler for suspicious tasks."""
+    if not keywords:
+        return
     print_check_header("Scheduled Tasks for persistence")
     found = False
     try:
@@ -58,8 +63,8 @@ def _check_scheduled_tasks(results) -> None:
             text=True,
             timeout=15,
         ).stdout.lower()
-        for keyword in _SUSPICIOUS_KEYWORDS:
-            if keyword in output:
+        for keyword in keywords:
+            if keyword.lower() in output:
                 print(
                     f"  {RED}{BOLD}! SUSPICIOUS SCHEDULED TASK "
                     f"(matched: {keyword}){RESET}"
@@ -72,9 +77,13 @@ def _check_scheduled_tasks(results) -> None:
         print_clean("No suspicious scheduled tasks")
 
 
-def run_windows_ioc_checks(results) -> None:
+def run_windows_ioc_checks(
+    results,
+    registry_keywords: list[str],
+    schtask_keywords: list[str],
+) -> None:
     """Run all Windows-specific IOC checks."""
     print()
-    _check_registry_run_keys(results)
+    _check_registry_run_keys(results, registry_keywords)
     print()
-    _check_scheduled_tasks(results)
+    _check_scheduled_tasks(results, schtask_keywords)

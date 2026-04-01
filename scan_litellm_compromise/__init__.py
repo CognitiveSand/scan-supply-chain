@@ -1,5 +1,5 @@
-"""LiteLLM Supply Chain Attack Scanner.
+"""Supply Chain Compromise Scanner.
 
-Detects compromised versions (v1.82.7, v1.82.8) and IOC artifacts.
-Reference: TeamPCP campaign, March 24 2026
+Detects known supply chain attacks across PyPI and npm ecosystems.
+Threat profiles are defined in threats/*.toml and are user-extensible.
 """

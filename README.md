@@ -1,8 +1,15 @@
-# LiteLLM Supply Chain Attack Scanner
+# Supply Chain Compromise Scanner
 
-A best-effort scanner that **attempts to detect** indicators of compromise (IOCs) left by the malicious LiteLLM PyPI packages v1.82.7 and v1.82.8, published on March 24, 2026. The compromise was identified by security researchers at **Endor Labs**, **Datadog Security Labs**, **Snyk**, and **Sonatype**, with the initial public disclosure filed as [GitHub Issue #24512](https://github.com/BerriAI/litellm/issues/24512).
+A data-driven scanner that detects indicators of compromise (IOCs) from known **PyPI and npm supply chain attacks**. Threat profiles are defined in TOML files and are user-extensible — add your own without writing code.
 
-> **No guarantees.** This tool attempts to find known artifacts associated with the compromise. It does **not** guarantee detection of all malicious activity, nor does it guarantee that a clean scan means your system was not affected. A determined attacker may have removed traces, and the tool cannot detect secrets that have already been exfiltrated. Use this scanner as one input in your incident response — not as a definitive verdict.
+**Built-in threat profiles:**
+
+| ID | Package | Ecosystem | Compromised Versions | Date |
+|----|---------|-----------|---------------------|------|
+| `litellm-2026-03` | litellm | PyPI | 1.82.7, 1.82.8 | 2026-03-24 |
+| `axios-2026-03` | axios | npm | 1.14.1, 0.30.4 | 2026-03-31 |
+
+> **No guarantees.** This tool attempts to find known artifacts associated with supply chain compromises. It does **not** guarantee detection of all malicious activity, nor does it guarantee that a clean scan means your system was not affected. A determined attacker may have removed traces, and the tool cannot detect secrets that have already been exfiltrated. Use this scanner as one input in your incident response — not as a definitive verdict.
 
 ## Quick Start
 
@@ -59,169 +66,202 @@ cd scan_litellm_compromise
 py run_scan.py
 ```
 
-No dependencies required — uses only the Python standard library.
+No dependencies required — uses only the Python 3.11+ standard library.
 
 ### Command-Line Options
 
 | Flag | Description |
 |------|-------------|
-| `--scan-path DIR` | Restrict Phase 1 (discovery) and Phase 4 (source scan) to a specific directory instead of scanning the entire system. IOC artifact checks (Phase 3) still run system-wide. |
-| `--resolve-c2` | Enable live DNS queries to C2 domains in addition to using hardcoded known IPs. See warning below. |
+| *(no flags)* | **Scans all known threats** (default behavior). |
+| `--threat ID` | Scan for a specific threat only (e.g. `--threat litellm-2026-03`). |
+| `--threat-file PATH` | Load a custom threat profile from a TOML file. |
+| `--list-threats` | List all available threat profiles and exit. |
+| `--scan-path DIR` | Restrict scanning to a specific directory instead of system-wide search. |
+| `--resolve-c2` | Enable live DNS queries to C2 domains (default: use known IPs only). |
 | `--help` | Show usage information. |
 
-> **Warning about `--resolve-c2`:** This flag causes the scanner to make live DNS queries to `models.litellm.cloud` and `checkmarx.zone` — both **attacker-controlled domains**. This carries real risks:
-> - **Operational security:** Your DNS query is visible to the attacker's infrastructure, revealing that you are actively investigating the compromise. This could prompt them to rotate infrastructure, wipe logs, or accelerate exploitation of already-stolen credentials.
-> - **Network monitoring:** The queries may trigger alerts in your own SIEM, IDS, or SOC dashboards, creating noise during an active incident response.
-> - **DNS logging:** Corporate DNS resolvers and upstream providers log queries. The domains may already be on threat intel blocklists, which could flag your machine as compromised.
+> **Warning about `--resolve-c2`:** This flag causes the scanner to make live DNS queries to attacker-controlled domains. This carries real risks:
+> - **Operational security:** Your DNS query is visible to the attacker's infrastructure.
+> - **Network monitoring:** The queries may trigger alerts in your SIEM/IDS.
 >
-> **In most cases you do not need this flag.** The scanner ships hardcoded known IPs (`46.151.182.203`, `83.142.209.11`) confirmed by multiple threat intelligence sources. Live DNS is only useful if you suspect the attacker has rotated to new infrastructure since this tool was last updated.
+> **In most cases you do not need this flag.** The scanner ships hardcoded known IPs confirmed by multiple threat intelligence sources.
 
 **Examples:**
 
 ```bash
+# Scan for all known threats (default)
+scan-litellm
+
 # Scan only a specific project directory
-python3 -m scan_litellm_compromise --scan-path /home/user/myproject
+scan-litellm --scan-path /home/user/myproject
 
-# Enable live DNS resolution for C2 connection checks
-python3 -m scan_litellm_compromise --resolve-c2
+# Scan for a specific threat only
+scan-litellm --threat axios-2026-03
 
-# Combine both
-python3 -m scan_litellm_compromise --scan-path ./myproject --resolve-c2
+# List available threat profiles
+scan-litellm --list-threats
+
+# Use a custom threat profile
+scan-litellm --threat-file ./my-threat.toml
+```
+
+## Threat Library
+
+Threat profiles are TOML files that define everything about a specific supply chain attack: package name, ecosystem, compromised versions, C2 infrastructure, IOC file paths, and remediation steps.
+
+### Built-in threats
+
+Ship with the package in `scan_litellm_compromise/threats/`. Updated via `pip install --upgrade`.
+
+### User-defined threats
+
+Drop a `.toml` file into:
+- **Linux/macOS:** `~/.config/scan-supply-chain/threats/`
+- **Windows:** `%LOCALAPPDATA%\scan-supply-chain\threats\`
+
+User profiles override built-in profiles with the same `id`.
+
+### Writing a threat profile
+
+```toml
+[threat]
+id          = "mypackage-2026-04"
+name        = "MyPackage Supply Chain Attack"
+date        = "2026-04-01"
+ecosystem   = "pypi"          # "pypi" or "npm"
+package     = "mypackage"
+compromised = ["1.0.1"]
+safe        = "1.0.0"
+advisory    = "https://example.com/advisory"
+description = "Description of what happened."
+
+[c2]
+domains = ["evil.example.com"]
+ports   = []
+
+[c2.ips]
+"evil.example.com" = ["1.2.3.4"]
+
+[[ioc.known_paths]]
+description = "backdoor payload"
+linux       = ["/tmp/backdoor.py"]
+darwin      = ["/tmp/backdoor.py"]
+windows     = ['%TEMP%\backdoor.exe']
+
+[ioc.phantom_deps]
+names = ["malicious-dep"]       # should NEVER exist
+
+[ioc.kubernetes]
+pod_patterns = []
+namespace    = ""
+
+[ioc.windows]
+registry_keywords = []
+schtask_keywords  = []
+
+[remediation]
+rotate_secrets  = true
+install_command = "pip install mypackage==1.0.0"
+
+[remediation.remove_artifacts]
+linux   = ["Remove /tmp/backdoor.py"]
+darwin  = ["Remove /tmp/backdoor.py"]
+windows = ['Remove %TEMP%\backdoor.exe']
+
+[remediation.check_persistence]
+linux   = ["Check crontab -l"]
+darwin  = ["Check launchctl list"]
+windows = ["Check Task Scheduler"]
 ```
 
 ## Video Overview
 
-This scanner was inspired by [Fahd Mirza's video](https://www.youtube.com/watch?v=YoClPk7KqZc) highlighting the incident — thanks to him for bringing it to attention.
+This scanner was inspired by [Fahd Mirza's video](https://www.youtube.com/watch?v=YoClPk7KqZc) highlighting the LiteLLM incident — thanks to him for bringing it to attention.
 
-## What Happened
+## Known Attacks
 
-On March 24, 2026, two backdoored versions of the `litellm` Python package were published to PyPI:
+### LiteLLM PyPI Compromise (March 24, 2026)
 
-- **v1.82.7** (uploaded ~10:39 UTC) — malicious code injected into `litellm/proxy/proxy_server.py` (base64-encoded)
-- **v1.82.8** (uploaded ~10:52 UTC) — added a `litellm_init.pth` file that executes on **every Python interpreter startup**, regardless of whether litellm is imported
+Two backdoored versions of the `litellm` Python package were published to PyPI:
 
-The packages were available for approximately **3 hours** before PyPI quarantined them. LiteLLM has roughly 95 million monthly downloads.
+- **v1.82.7** — malicious code injected into `proxy_server.py` (base64-encoded)
+- **v1.82.8** — added a `litellm_init.pth` file that executes on every Python interpreter startup
 
-### How the Attack Worked
+Available for ~3 hours before PyPI quarantined them. LiteLLM has ~95 million monthly downloads. The attacker compromised BerriAI's PyPI token by poisoning the `aquasecurity/trivy-action` GitHub Action.
 
-The attacker compromised BerriAI's `PYPI_PUBLISH` token by poisoning the `aquasecurity/trivy-action` GitHub Action used in LiteLLM's CI/CD pipeline. Malicious commits were force-pushed onto 75 of 76 existing version tags in the Trivy action repository. When LiteLLM's CI ran, it fetched the attacker-controlled action, which exfiltrated the PyPI publishing token. This was identified and documented by researchers at **Endor Labs**, **Snyk**, and **StepSecurity**.
+**Three-stage payload:** credential harvesting, AES-256+RSA-4096 encrypted exfiltration to C2, persistent backdoor polling every 50 minutes. If K8s credentials found, deploys privileged `node-setup-*` pods for lateral movement.
 
-### Three-Stage Payload
+### Axios npm Compromise (March 31, 2026)
 
-**Stage 1 — Credential Harvester:**
-Sweeps the local filesystem and live process environments for secrets including:
-- SSH private keys (`~/.ssh/`)
-- AWS, GCP, and Azure credentials
-- Kubernetes kubeconfig and service account tokens
-- Database credentials (PostgreSQL, MySQL, Redis)
-- CI/CD tokens (PyPI, npm, Docker registry, GitHub PATs)
-- All environment variables (capturing API keys for OpenAI, Anthropic, etc.)
-- `.env` files (recursively discovered)
-- Shell histories, git credentials, TLS private keys
-- Cryptocurrency wallets
+The `axios` npm package (100M weekly downloads) was compromised via maintainer account takeover attributed to North Korea's UNC1069/BlueNoroff:
 
-**Stage 2 — Encrypted Exfiltration:**
-Harvested data is encrypted with AES-256-CBC (random session key) and the session key is encrypted with a hardcoded RSA-4096 public key. The bundle is archived as `/tmp/tpcp.tar.gz` and sent via HTTPS POST to `models.litellm.cloud`.
+- **v1.14.1** (tagged `latest`) and **v0.30.4** (tagged `legacy`)
+- Injected phantom dependency `plain-crypto-js@4.2.1` with postinstall RAT dropper
+- Cross-platform RAT payloads: PowerShell (Windows), compiled binary (macOS), Python script (Linux)
+- Self-deleting dropper with double-layer obfuscation
 
-**Stage 3 — Persistence Backdoor:**
-- Drops `~/.config/sysmon/sysmon.py`
-- Creates `~/.config/systemd/user/sysmon.service` ("System Telemetry Service")
-- Every 50 minutes, polls `checkmarx.zone/raw` for a secondary payload, downloads it to `/tmp/pglog`, and executes it
-- Tracks state in `/tmp/.pg_state`
+Available for ~3 hours. C2 at `sfrclak.com:8000`.
 
-### Kubernetes Lateral Movement
+## What This Scanner Detects
 
-If a Kubernetes service account token is found, the payload deploys **privileged pods** named `node-setup-{node_name}` into the `kube-system` namespace on every node. These pods mount the host root filesystem and install the sysmon backdoor at the node level.
-
-## What This Scanner Attempts to Find
-
-This scanner makes a best-effort attempt to detect known IOCs. It automatically detects the platform (Linux, macOS, or Windows) and adjusts scan paths accordingly.
+The scanner runs a 5-phase pipeline for each threat profile:
 
 | Phase | What It Looks For |
 |-------|-------------------|
-| 1 | litellm metadata directories (`dist-info` / `egg-info`) across filesystem (Linux: `/home`, `/opt`, `/usr`, `/srv`, `/var`; macOS: `/Users`, `/opt/homebrew`, `/Library`; Windows: `%USERPROFILE%`, `%APPDATA%`, `Program Files`). Can be restricted with `--scan-path`. |
-| 2 | litellm version from metadata files — no Python interpreter execution needed |
-| 3 | IOC artifacts: `litellm_init.pth`, sysmon persistence, temp staging files, C2 network connections (matched against hardcoded known IPs by default; `--resolve-c2` enables live DNS), suspicious Kubernetes pods. On Windows: also checks Registry Run keys and Scheduled Tasks |
-| 4 | Source files and dependency configs (pyproject.toml, requirements.txt, etc.) that reference litellm, flagging any pinned to compromised versions |
+| 1 | Package metadata directories across the filesystem (PyPI: `dist-info`/`egg-info`; npm: `node_modules/*/package.json`) |
+| 2 | Package version from metadata — flags compromised versions |
+| 3 | IOC artifacts: backdoor files, persistence mechanisms, temp staging files, C2 network connections, suspicious Kubernetes pods, phantom dependencies, Windows Registry/Tasks |
+| 4 | Source files and dependency configs referencing the package, flagging pinned compromised versions |
+| 5 | Per-threat summary, verdicts, and remediation guidance |
 
 ## Limitations
 
-- **This scanner cannot detect exfiltrated secrets.** If your credentials were sent to the attacker's C2 server, no local scan can undo that. Credential rotation is required regardless of scan results.
-- **Artifacts may have been cleaned up.** The absence of IOC files does not prove the system was never compromised.
-- **The scanner does not inspect Docker image layers, CI/CD runner caches, or remote systems.** Each environment must be checked independently.
-- **Root-owned paths (`/root` on Linux) are excluded.** If you need to scan those, run a separate check with appropriate privileges.
-- **The scanner cannot decrypt exfiltrated data.** Only the attacker holds the RSA-4096 private key.
-- **Windows Registry scanning is best-effort.** The scanner checks common Run key locations but cannot cover all possible persistence mechanisms (WMI subscriptions, COM hijacking, etc.).
-
-## Usage
-
-**Linux / macOS:**
-
-```bash
-python3 run_scan.py
-# or
-python3 -m scan_litellm_compromise
-# or, if installed via pip:
-scan-litellm
-```
-
-**Windows — double-click `run_scan.bat`**, or from a terminal:
-
-```cmd
-py run_scan.py
-```
-
-The scanner auto-detects the platform (Linux, macOS, or Windows) and adjusts scan paths, network commands, and persistence checks accordingly.
-
-Exit code is `1` if compromise indicators are found, `0` otherwise.
-
-See [Command-Line Options](#command-line-options) for `--scan-path` and `--resolve-c2`.
+- **Cannot detect exfiltrated secrets.** Credential rotation is required regardless of scan results.
+- **Artifacts may have been cleaned up.** Absence of IOC files does not prove the system was never compromised.
+- **Does not inspect Docker image layers, CI/CD runner caches, or remote systems.**
+- **Root-owned paths (`/root` on Linux) are excluded.**
+- **Windows Registry scanning is best-effort.**
 
 ## Platform Support
 
 | Feature | Linux | macOS | Windows 10/11 |
 |---------|-------|-------|---------------|
-| litellm detection | `/home`, `/opt`, `/usr`, `/srv`, `/var` | `/Users`, `/opt/homebrew`, `/usr/local`, `/Library` | `%USERPROFILE%`, `%APPDATA%`, `Program Files` |
-| Conda/pipx detection | `/opt/conda`, `~/.local/share/pipx` | Homebrew Caskroom, `~/.local/share/pipx` | `%LOCALAPPDATA%\Miniconda3`, `%LOCALAPPDATA%\pipx` |
-| Persistence check | systemd user services | sysmon files (inert without systemd) | Registry Run keys, Scheduled Tasks, Startup folder |
-| Temp artifacts | `/tmp/` | `/tmp/` | `%TEMP%` |
+| Package detection | `/home`, `/opt`, `/usr`, `/srv`, `/var` | `/Users`, `/opt/homebrew`, `/usr/local`, `/Library` | `%USERPROFILE%`, `%APPDATA%`, `Program Files` |
+| Conda/pipx/nvm detection | `/opt/conda`, `~/.local/share/pipx` | Homebrew Caskroom, `~/.local/share/pipx` | `%LOCALAPPDATA%\Miniconda3`, `%LOCALAPPDATA%\pipx` |
 | Network connections | `ss -tnp` | `lsof -i -P -n` | `netstat -ano` |
-| C2 IP matching | Hardcoded known IPs (opt-in live DNS via `--resolve-c2`) | Same | Same |
 | ANSI terminal colors | Native | Native | Auto-enabled via Virtual Terminal Processing |
-
-### macOS Note
-
-macOS support was added based on threat intelligence analysis of the TeamPCP malware's behavior on Darwin systems. **It has not been tested on actual macOS hardware** as the maintainer does not currently have access to a Mac. The malware's credential theft and `.pth` backdoor are confirmed to work on macOS, but the systemd persistence mechanism is inert (macOS uses launchd, not systemd). If you run this scanner on macOS and encounter issues, please open an issue.
 
 ## If Compromise Is Detected
 
-**Assume ALL secrets on the affected machine are compromised.** The following steps are recommended — this list is not exhaustive:
+**Assume ALL secrets on the affected machine are compromised.** The scanner provides threat-specific remediation steps. General guidance:
 
-1. **Rotate credentials immediately** — SSH keys, cloud provider credentials (AWS/GCP/Azure), API keys, database passwords, CI/CD tokens, `.env` file contents
-2. **Remove malicious artifacts** — delete `litellm_init.pth`, sysmon persistence files, and temp staging files (see platform-specific paths above)
-3. **Downgrade litellm** — `pip install litellm==1.82.6` (last known clean version) or upgrade past the compromised range once verified safe
-4. **Update pinned versions** — check all `requirements.txt`, `pyproject.toml`, and lock files for references to 1.82.7 or 1.82.8
-5. **Inspect Kubernetes clusters** — look for `node-setup-*` pods in `kube-system`, audit ClusterRoleBindings
-6. **Block C2 domains** — `models.litellm.cloud` and `checkmarx.zone` at DNS/firewall level
-7. **Audit cloud provider logs** — check AWS CloudTrail, GCP Audit Logs, Azure Activity Logs for unauthorized API calls using potentially stolen credentials
+1. **Rotate credentials immediately** — SSH keys, cloud credentials, API keys, database passwords, CI/CD tokens
+2. **Remove malicious artifacts** — see scanner output for specific paths
+3. **Fix the package** — install the safe version indicated by the scanner
+4. **Update pinned versions** — check all dependency files for compromised version pins
+5. **Block C2 domains** — at DNS/firewall level
+6. **Audit cloud provider logs** — check for unauthorized API calls
 
 ## Advisories and References
+
+### LiteLLM
 
 | ID | Source |
 |----|--------|
 | PYSEC-2026-2 | [Python Packaging Authority (PyPA)](https://github.com/pypa/advisory-database/blob/main/vulns/litellm/PYSEC-2026-2.yaml) |
 | SNYK-PYTHON-LITELLM-15762713 | [Snyk](https://security.snyk.io/vuln/SNYK-PYTHON-LITELLM-15762713) |
 | GitHub Issue #24512 | [Initial disclosure](https://github.com/BerriAI/litellm/issues/24512) |
-| GitHub Issue #24518 | [Official timeline](https://github.com/BerriAI/litellm/issues/24518) |
 
-### Security Research and Technical Analyses
+**Research:** [Endor Labs](https://www.endorlabs.com/learn/teampcp-isnt-done), [Datadog Security Labs](https://securitylabs.datadoghq.com/articles/litellm-compromised-pypi-teampcp-supply-chain-campaign/), [Snyk](https://snyk.io/articles/poisoned-security-scanner-backdooring-litellm/), [Sonatype](https://www.sonatype.com/blog/compromised-litellm-pypi-package-delivers-multi-stage-credential-stealer), [StepSecurity](https://www.stepsecurity.io/blog/trivy-compromised-a-second-time---malicious-v0-69-4-release)
 
-- [Endor Labs](https://www.endorlabs.com/learn/teampcp-isnt-done) — full campaign timeline and attribution
-- [Datadog Security Labs](https://securitylabs.datadoghq.com/articles/litellm-compromised-pypi-teampcp-supply-chain-campaign/) — payload and artifact analysis
-- [Snyk](https://snyk.io/articles/poisoned-security-scanner-backdooring-litellm/) — IOC hashes and advisory
-- [Sonatype](https://www.sonatype.com/blog/compromised-litellm-pypi-package-delivers-multi-stage-credential-stealer) — stage-by-stage payload analysis
-- [StepSecurity](https://www.stepsecurity.io/blog/trivy-compromised-a-second-time---malicious-v0-69-4-release) — Trivy supply chain compromise analysis
-- [Microsoft Security Blog](https://www.microsoft.com/en-us/security/blog/2026/03/24/detecting-investigating-defending-against-trivy-supply-chain-compromise/) — detection and defense guidance
+### Axios
+
+| ID | Source |
+|----|--------|
+| GHSA-fw8c-xr5c-95f9 | [GitHub Advisory](https://github.com/advisories/GHSA-fw8c-xr5c-95f9) |
+| MAL-2026-2306 | Malicious Package Identifier |
+
+**Research:** [Snyk](https://snyk.io/blog/axios-npm-package-compromised-supply-chain-attack-delivers-cross-platform/), [Socket](https://socket.dev/blog/axios-npm-package-compromised), [Huntress](https://www.huntress.com/blog/supply-chain-compromise-axios-npm-package), [Datadog Security Labs](https://securitylabs.datadoghq.com/articles/axios-npm-supply-chain-compromise/), [Wiz](https://www.wiz.io/blog/axios-npm-compromised-in-supply-chain-attack)
 
 ### Known IOC Hashes (SHA-256)
 
@@ -235,26 +275,32 @@ macOS support was added based on threat intelligence analysis of the TeamPCP mal
 
 ```
 scan_litellm_compromise/
-  __main__.py            Entry point for python -m
-  scanner.py             Orchestrator (argparse CLI)
-  config.py              Cross-platform constants, patterns, and known C2 IPs
+  threats/               Threat profile TOML files (user-extensible)
+    litellm-2026-03.toml   LiteLLM PyPI compromise
+    axios-2026-03.toml     Axios npm compromise
+  threat_profile.py      ThreatProfile dataclass + TOML loader
+  ecosystem_base.py      EcosystemPlugin protocol + factory
+  ecosystem_pypi.py      PyPI: dist-info, METADATA, Python patterns
+  ecosystem_npm.py       npm: node_modules, package.json, JS/TS patterns
+  scanner.py             Orchestrator (multi-threat CLI)
+  config.py              Generic constants (skip dirs)
   models.py              Typed data structures
   formatting.py          Terminal output (ANSI with Windows support)
   platform_policy.py     Platform abstraction (Strategy pattern)
-  platform_linux.py      Linux-specific paths and commands
-  platform_darwin.py     macOS-specific paths and commands
-  platform_windows.py    Windows-specific paths and commands
+  platform_linux.py      Linux paths and commands
+  platform_darwin.py     macOS paths and commands
+  platform_windows.py    Windows paths and commands
   ioc_windows.py         Windows-only IOC checks (Registry, Tasks)
-  discovery.py           Phase 1 — find litellm metadata directories
-  version_checker.py     Phase 2 — read litellm version from metadata
+  discovery.py           Phase 1 — find package metadata
+  version_checker.py     Phase 2 — read package version
   ioc_scanner.py         Phase 3 — IOC artifact detection
   source_scanner.py      Phase 4 — source/config file scanning
   report.py              Phase 5 — summary and remediation
-tests/                   pytest test suite (299 tests)
+tests/                   pytest test suite (230 tests)
 run_scan.py              Direct entry point
 run_scan.bat             Double-click launcher for Windows
 ```
 
 ## Disclaimer
 
-This tool is provided as-is, with no warranty of any kind. It **attempts to find** known indicators of the LiteLLM v1.82.7/v1.82.8 compromise but **cannot guarantee** complete detection. A clean scan does not mean your system was unaffected. Always perform credential rotation if there is any possibility that a compromised version was installed in your environment, even briefly.
+This tool is provided as-is, with no warranty of any kind. It **attempts to find** known indicators of supply chain compromises but **cannot guarantee** complete detection. A clean scan does not mean your system was unaffected. Always perform credential rotation if there is any possibility that a compromised package was installed in your environment, even briefly.

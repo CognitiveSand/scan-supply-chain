@@ -12,69 +12,7 @@ from scan_litellm_compromise.models import (
     SourceReference,
 )
 
-
-# ── Installation.is_compromised ────────────────────────────────────────
-
-
-class TestInstallationIsCompromised:
-
-    def test_version_1_82_7_is_compromised(self):
-        inst = Installation(env_path="/env", version="1.82.7")
-        assert inst.is_compromised is True
-
-    def test_version_1_82_8_is_compromised(self):
-        inst = Installation(env_path="/env", version="1.82.8")
-        assert inst.is_compromised is True
-
-    def test_version_1_82_6_is_not_compromised(self):
-        inst = Installation(env_path="/env", version="1.82.6")
-        assert inst.is_compromised is False
-
-    def test_version_1_83_0_is_not_compromised(self):
-        inst = Installation(env_path="/env", version="1.83.0")
-        assert inst.is_compromised is False
-
-    def test_empty_version_is_not_compromised(self):
-        inst = Installation(env_path="/env", version="")
-        assert inst.is_compromised is False
-
-    def test_version_with_leading_whitespace_is_not_compromised(self):
-        inst = Installation(env_path="/env", version=" 1.82.7")
-        assert inst.is_compromised is False
-
-
-# ── ConfigReference.is_compromised ─────────────────────────────────────
-
-
-class TestConfigReferenceIsCompromised:
-
-    def test_pinned_to_1_82_7_is_compromised(self):
-        ref = ConfigReference(
-            file_path="r.txt", line_number=1,
-            line_content="litellm==1.82.7", pinned_version="1.82.7",
-        )
-        assert ref.is_compromised is True
-
-    def test_pinned_to_1_82_8_is_compromised(self):
-        ref = ConfigReference(
-            file_path="r.txt", line_number=1,
-            line_content="litellm==1.82.8", pinned_version="1.82.8",
-        )
-        assert ref.is_compromised is True
-
-    def test_pinned_to_safe_version_is_not_compromised(self):
-        ref = ConfigReference(
-            file_path="r.txt", line_number=1,
-            line_content="litellm==1.82.6", pinned_version="1.82.6",
-        )
-        assert ref.is_compromised is False
-
-    def test_no_pinned_version_is_not_compromised(self):
-        ref = ConfigReference(
-            file_path="r.txt", line_number=1,
-            line_content="litellm>=1.80", pinned_version=None,
-        )
-        assert ref.is_compromised is False
+from tests.conftest import LITELLM_COMPROMISED
 
 
 # ── ScanResults.compromised_installations ──────────────────────────────
@@ -82,25 +20,72 @@ class TestConfigReferenceIsCompromised:
 
 class TestCompromisedInstallationsFiltering:
 
+    def test_version_1_82_7_is_compromised(self):
+        results = ScanResults(
+            compromised_versions=LITELLM_COMPROMISED,
+            installations=[Installation(env_path="/env", version="1.82.7")],
+        )
+        assert len(results.compromised_installations) == 1
+
+    def test_version_1_82_8_is_compromised(self):
+        results = ScanResults(
+            compromised_versions=LITELLM_COMPROMISED,
+            installations=[Installation(env_path="/env", version="1.82.8")],
+        )
+        assert len(results.compromised_installations) == 1
+
+    def test_version_1_82_6_is_not_compromised(self):
+        results = ScanResults(
+            compromised_versions=LITELLM_COMPROMISED,
+            installations=[Installation(env_path="/env", version="1.82.6")],
+        )
+        assert len(results.compromised_installations) == 0
+
+    def test_version_1_83_0_is_not_compromised(self):
+        results = ScanResults(
+            compromised_versions=LITELLM_COMPROMISED,
+            installations=[Installation(env_path="/env", version="1.83.0")],
+        )
+        assert len(results.compromised_installations) == 0
+
+    def test_empty_version_is_not_compromised(self):
+        results = ScanResults(
+            compromised_versions=LITELLM_COMPROMISED,
+            installations=[Installation(env_path="/env", version="")],
+        )
+        assert len(results.compromised_installations) == 0
+
+    def test_version_with_leading_whitespace_is_not_compromised(self):
+        results = ScanResults(
+            compromised_versions=LITELLM_COMPROMISED,
+            installations=[Installation(env_path="/env", version=" 1.82.7")],
+        )
+        assert len(results.compromised_installations) == 0
+
     def test_mixed_installations_filters_only_compromised(self):
-        results = ScanResults(installations=[
-            Installation(env_path="/a", version="1.82.7"),
-            Installation(env_path="/b", version="1.82.6"),
-            Installation(env_path="/c", version="1.82.8"),
-        ])
+        results = ScanResults(
+            compromised_versions=LITELLM_COMPROMISED,
+            installations=[
+                Installation(env_path="/a", version="1.82.7"),
+                Installation(env_path="/b", version="1.82.6"),
+                Installation(env_path="/c", version="1.82.8"),
+            ],
+        )
         compromised = results.compromised_installations
         assert len(compromised) == 2
-        assert all(i.is_compromised for i in compromised)
 
     def test_no_installations_returns_empty_list(self):
-        results = ScanResults()
+        results = ScanResults(compromised_versions=LITELLM_COMPROMISED)
         assert results.compromised_installations == []
 
     def test_only_safe_installations_returns_empty_list(self):
-        results = ScanResults(installations=[
-            Installation(env_path="/a", version="1.80.0"),
-            Installation(env_path="/b", version="1.82.6"),
-        ])
+        results = ScanResults(
+            compromised_versions=LITELLM_COMPROMISED,
+            installations=[
+                Installation(env_path="/a", version="1.80.0"),
+                Installation(env_path="/b", version="1.82.6"),
+            ],
+        )
         assert results.compromised_installations == []
 
 
@@ -109,16 +94,55 @@ class TestCompromisedInstallationsFiltering:
 
 class TestCompromisedConfigsFiltering:
 
+    def test_pinned_to_1_82_7_is_compromised(self):
+        results = ScanResults(
+            compromised_versions=LITELLM_COMPROMISED,
+            config_refs=[
+                ConfigReference("r.txt", 1, "litellm==1.82.7", "1.82.7"),
+            ],
+        )
+        assert len(results.compromised_configs) == 1
+
+    def test_pinned_to_1_82_8_is_compromised(self):
+        results = ScanResults(
+            compromised_versions=LITELLM_COMPROMISED,
+            config_refs=[
+                ConfigReference("r.txt", 1, "litellm==1.82.8", "1.82.8"),
+            ],
+        )
+        assert len(results.compromised_configs) == 1
+
+    def test_pinned_to_safe_version_is_not_compromised(self):
+        results = ScanResults(
+            compromised_versions=LITELLM_COMPROMISED,
+            config_refs=[
+                ConfigReference("r.txt", 1, "litellm==1.82.6", "1.82.6"),
+            ],
+        )
+        assert len(results.compromised_configs) == 0
+
+    def test_no_pinned_version_is_not_compromised(self):
+        results = ScanResults(
+            compromised_versions=LITELLM_COMPROMISED,
+            config_refs=[
+                ConfigReference("r.txt", 1, "litellm>=1.80", None),
+            ],
+        )
+        assert len(results.compromised_configs) == 0
+
     def test_mixed_configs_filters_only_compromised(self):
-        results = ScanResults(config_refs=[
-            ConfigReference("a.txt", 1, "litellm==1.82.7", "1.82.7"),
-            ConfigReference("b.txt", 1, "litellm==1.80.0", "1.80.0"),
-        ])
+        results = ScanResults(
+            compromised_versions=LITELLM_COMPROMISED,
+            config_refs=[
+                ConfigReference("a.txt", 1, "litellm==1.82.7", "1.82.7"),
+                ConfigReference("b.txt", 1, "litellm==1.80.0", "1.80.0"),
+            ],
+        )
         assert len(results.compromised_configs) == 1
         assert results.compromised_configs[0].pinned_version == "1.82.7"
 
     def test_no_configs_returns_empty_list(self):
-        results = ScanResults()
+        results = ScanResults(compromised_versions=LITELLM_COMPROMISED)
         assert results.compromised_configs == []
 
 
@@ -128,35 +152,46 @@ class TestCompromisedConfigsFiltering:
 class TestScanResultsIsClean:
 
     def test_clean_when_no_issues(self):
-        results = ScanResults()
+        results = ScanResults(compromised_versions=LITELLM_COMPROMISED)
         assert results.is_clean is True
 
     def test_clean_with_safe_installations(self):
-        results = ScanResults(installations=[
-            Installation(env_path="/a", version="1.82.6"),
-        ])
+        results = ScanResults(
+            compromised_versions=LITELLM_COMPROMISED,
+            installations=[Installation(env_path="/a", version="1.82.6")],
+        )
         assert results.is_clean is True
 
     def test_not_clean_when_compromised_installation_present(self):
-        results = ScanResults(installations=[
-            Installation(env_path="/a", version="1.82.7"),
-        ])
+        results = ScanResults(
+            compromised_versions=LITELLM_COMPROMISED,
+            installations=[Installation(env_path="/a", version="1.82.7")],
+        )
         assert results.is_clean is False
 
     def test_not_clean_when_ioc_present(self):
-        results = ScanResults(iocs=["/tmp/pglog"])
+        results = ScanResults(
+            compromised_versions=LITELLM_COMPROMISED,
+            iocs=["/tmp/pglog"],
+        )
         assert results.is_clean is False
 
     def test_not_clean_when_compromised_config_present(self):
-        results = ScanResults(config_refs=[
-            ConfigReference("r.txt", 1, "litellm==1.82.8", "1.82.8"),
-        ])
+        results = ScanResults(
+            compromised_versions=LITELLM_COMPROMISED,
+            config_refs=[
+                ConfigReference("r.txt", 1, "litellm==1.82.8", "1.82.8"),
+            ],
+        )
         assert results.is_clean is False
 
     def test_clean_with_source_refs_but_no_compromise(self):
-        results = ScanResults(source_refs=[
-            SourceReference("/app.py", 1, "import litellm"),
-        ])
+        results = ScanResults(
+            compromised_versions=LITELLM_COMPROMISED,
+            source_refs=[
+                SourceReference("/app.py", 1, "import litellm"),
+            ],
+        )
         assert results.is_clean is True
 
 

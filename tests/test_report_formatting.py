@@ -1,6 +1,6 @@
 """Tests for Phase 5: summary report and output formatting.
 
-Modules under test: scan_litellm_compromise.report, scan_litellm_compromise.formatting
+Module under test: scan_litellm_compromise.report
 """
 
 import pytest
@@ -12,168 +12,143 @@ from scan_litellm_compromise.models import (
     SourceReference,
 )
 from scan_litellm_compromise.report import (
-    _format_version_tag,
-    _group_by_file,
     print_config_refs,
     print_source_refs,
-    print_summary,
+    print_threat_report,
+    print_multi_threat_summary,
 )
-from tests.conftest import StubPolicy
+
+from tests.conftest import LITELLM_COMPROMISED, make_litellm_threat
 
 
-# ── _group_by_file (pure) ────────────────────────────────────────────
-
-
-class TestGroupByFile:
-
-    def test_groups_refs_by_file_path(self):
-        refs = [
-            SourceReference("/a.py", 1, "import litellm"),
-            SourceReference("/a.py", 5, "litellm.completion()"),
-            SourceReference("/b.py", 3, "import litellm"),
-        ]
-        grouped = _group_by_file(refs)
-
-        assert len(grouped) == 2
-        assert len(grouped["/a.py"]) == 2
-        assert len(grouped["/b.py"]) == 1
-
-    def test_preserves_insertion_order(self):
-        refs = [
-            SourceReference("/z.py", 1, "a"),
-            SourceReference("/a.py", 1, "b"),
-            SourceReference("/m.py", 1, "c"),
-        ]
-        grouped = _group_by_file(refs)
-
-        assert list(grouped.keys()) == ["/z.py", "/a.py", "/m.py"]
-
-    def test_returns_empty_dict_for_empty_input(self):
-        assert _group_by_file([]) == {}
-
-
-# ── _format_version_tag (pure) ───────────────────────────────────────
-
-
-class TestFormatVersionTag:
-
-    def test_shows_compromised_label_for_bad_version(self):
-        ref = ConfigReference("r.txt", 1, "litellm==1.82.7", "1.82.7")
-        tag = _format_version_tag(ref)
-        assert "COMPROMISED" in tag
-
-    def test_shows_safe_version_for_good_version(self):
-        ref = ConfigReference("r.txt", 1, "litellm==1.80.0", "1.80.0")
-        tag = _format_version_tag(ref)
-        assert "v1.80.0" in tag
-
-    def test_returns_empty_string_when_no_pinned_version(self):
-        ref = ConfigReference("r.txt", 1, '"litellm"', None)
-        assert _format_version_tag(ref) == ""
-
-
-# ── print_source_refs (stdout) ───────────────────────────────────────
+# ── print_source_refs ─────────────────────────────────────────────────
 
 
 class TestPrintSourceRefs:
 
-    def test_shows_file_paths_and_line_contents(self, capsys):
-        refs = [
-            SourceReference("/app.py", 10, "import litellm"),
-            SourceReference("/utils.py", 5, "from litellm import completion"),
-        ]
-        print_source_refs(refs)
-
-        captured = capsys.readouterr().out
-        assert "/app.py" in captured
-        assert "/utils.py" in captured
-        assert "import litellm" in captured
-
-    def test_truncates_after_five_lines_per_file(self, capsys):
-        refs = [
-            SourceReference("/big.py", i, f"litellm line {i}")
-            for i in range(1, 9)
-        ]
-        print_source_refs(refs)
-
-        captured = capsys.readouterr().out
-        assert "and 3 more references" in captured
-
-    def test_shows_clean_message_when_empty(self, capsys):
-        print_source_refs([])
-
+    def test_prints_clean_message_when_no_refs(self, capsys):
+        print_source_refs([], "litellm")
         captured = capsys.readouterr().out
         assert "No litellm imports found" in captured
 
+    def test_groups_refs_by_file(self, capsys):
+        refs = [
+            SourceReference("/a.py", 1, "import litellm"),
+            SourceReference("/a.py", 5, "litellm.completion()"),
+            SourceReference("/b.py", 3, "from litellm import x"),
+        ]
+        print_source_refs(refs, "litellm")
+        captured = capsys.readouterr().out
+        assert "2 files" in captured
+        assert "/a.py" in captured
+        assert "/b.py" in captured
 
-# ── print_config_refs (stdout) ───────────────────────────────────────
+    def test_truncates_long_file_lists(self, capsys):
+        refs = [
+            SourceReference("/a.py", i, f"line{i}")
+            for i in range(1, 10)
+        ]
+        print_source_refs(refs, "litellm")
+        captured = capsys.readouterr().out
+        assert "more references" in captured
+
+
+# ── print_config_refs ─────────────────────────────────────────────────
 
 
 class TestPrintConfigRefs:
 
-    def test_shows_version_annotations(self, capsys):
-        refs = [
-            ConfigReference("r.txt", 1, "litellm==1.82.7", "1.82.7"),
-            ConfigReference("r.txt", 3, "litellm==1.80.0", "1.80.0"),
-        ]
-        print_config_refs(refs)
-
-        captured = capsys.readouterr().out
-        assert "COMPROMISED" in captured
-        assert "v1.80.0" in captured
-
-    def test_shows_clean_message_when_empty(self, capsys):
-        print_config_refs([])
-
+    def test_prints_clean_message_when_no_refs(self, capsys):
+        print_config_refs([], "litellm", LITELLM_COMPROMISED)
         captured = capsys.readouterr().out
         assert "No litellm dependencies found" in captured
 
+    def test_prints_compromised_version_tag(self, capsys):
+        refs = [
+            ConfigReference("r.txt", 1, "litellm==1.82.7", "1.82.7"),
+        ]
+        print_config_refs(refs, "litellm", LITELLM_COMPROMISED)
+        captured = capsys.readouterr().out
+        assert "COMPROMISED" in captured
 
-# ── print_summary (stdout) ───────────────────────────────────────────
+    def test_prints_safe_version_tag(self, capsys):
+        refs = [
+            ConfigReference("r.txt", 1, "litellm==1.80.0", "1.80.0"),
+        ]
+        print_config_refs(refs, "litellm", LITELLM_COMPROMISED)
+        captured = capsys.readouterr().out
+        assert "v1.80.0" in captured
 
 
-class TestPrintSummary:
+# ── print_threat_report ───────────────────────────────────────────────
 
-    def test_shows_clean_verdict_when_no_issues(self, capsys):
-        results = ScanResults()
-        print_summary(results, StubPolicy())
 
+class TestPrintThreatReport:
+
+    def test_prints_clean_verdict(self, capsys):
+        threat = make_litellm_threat()
+        results = ScanResults(compromised_versions=LITELLM_COMPROMISED)
+        print_threat_report(results, threat)
         captured = capsys.readouterr().out
         assert "No compromise detected" in captured
 
-    def test_shows_remediation_when_compromised(self, capsys):
+    def test_prints_compromised_verdict(self, capsys):
+        threat = make_litellm_threat()
         results = ScanResults(
+            compromised_versions=LITELLM_COMPROMISED,
             installations=[Installation("/env", "1.82.7")],
         )
-        print_summary(results, StubPolicy())
-
+        print_threat_report(results, threat)
         captured = capsys.readouterr().out
-        assert "REMEDIATION" in captured
-        assert "litellm==1.82.6" in captured
+        assert "COMPROMISE DETECTED" in captured
+        assert "pip install litellm==1.82.6" in captured
 
-    def test_shows_warning_when_refs_exist_but_clean(self, capsys):
+    def test_prints_ioc_count(self, capsys):
+        threat = make_litellm_threat()
         results = ScanResults(
-            source_refs=[SourceReference("/app.py", 1, "import litellm")],
+            compromised_versions=LITELLM_COMPROMISED,
+            iocs=["/tmp/pglog"],
         )
-        print_summary(results, StubPolicy())
-
+        print_threat_report(results, threat)
         captured = capsys.readouterr().out
-        assert "No compromise detected" in captured
-        assert "NOTE" in captured
+        assert "1" in captured
 
-    def test_shows_ioc_count_when_present(self, capsys):
-        results = ScanResults(iocs=["/tmp/pglog"])
-        print_summary(results, StubPolicy())
-
+    def test_shows_advisory_url(self, capsys):
+        threat = make_litellm_threat()
+        results = ScanResults(
+            compromised_versions=LITELLM_COMPROMISED,
+            iocs=["/tmp/pglog"],
+        )
+        print_threat_report(results, threat)
         captured = capsys.readouterr().out
-        assert "REMEDIATION" in captured
+        assert threat.advisory in captured
 
-    def test_shows_compromised_config_remediation(self, capsys):
-        results = ScanResults(config_refs=[
-            ConfigReference("r.txt", 5, "litellm==1.82.8", "1.82.8"),
-        ])
-        print_summary(results, StubPolicy())
 
+# ── print_multi_threat_summary ────────────────────────────────────────
+
+
+class TestPrintMultiThreatSummary:
+
+    def test_all_clean(self, capsys):
+        threat = make_litellm_threat()
+        results = ScanResults(compromised_versions=LITELLM_COMPROMISED)
+        print_multi_threat_summary([(threat, results)])
         captured = capsys.readouterr().out
-        assert "r.txt" in captured
-        assert "REMEDIATION" in captured
+        assert "All checks passed" in captured
+
+    def test_any_compromised(self, capsys):
+        threat = make_litellm_threat()
+        results = ScanResults(
+            compromised_versions=LITELLM_COMPROMISED,
+            iocs=["/tmp/pglog"],
+        )
+        print_multi_threat_summary([(threat, results)])
+        captured = capsys.readouterr().out
+        assert "COMPROMISES DETECTED" in captured
+
+    def test_shows_profile_count(self, capsys):
+        threat = make_litellm_threat()
+        results = ScanResults(compromised_versions=LITELLM_COMPROMISED)
+        print_multi_threat_summary([(threat, results)])
+        captured = capsys.readouterr().out
+        assert "1 threat profile" in captured
