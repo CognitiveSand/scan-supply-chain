@@ -78,7 +78,6 @@ No dependencies required — uses only the Python 3.11+ standard library.
 | `--threat ID` | Scan for a specific threat only (e.g. `--threat litellm-2026-03`). |
 | `--threat-file PATH` | Load a custom threat profile from a TOML file. |
 | `--list-threats` | List all available threat profiles and exit. |
-| `--scan-path DIR` | Restrict scanning to a specific directory instead of system-wide search. |
 | `--resolve-c2` | Enable live DNS queries to C2 domains (default: use known IPs only). |
 | `--help` | Show usage information. |
 
@@ -95,8 +94,6 @@ No dependencies required — uses only the Python 3.11+ standard library.
 scan-supply-chain
 
 # Scan only a specific project directory
-scan-supply-chain --scan-path /home/user/myproject
-
 # Scan for a specific threat only
 scan-supply-chain --threat axios-2026-03
 

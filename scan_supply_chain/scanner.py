@@ -8,7 +8,6 @@ from pathlib import Path
 from . import __version__
 from .discovery import find_package_metadata
 from .ecosystem_base import get_ecosystem
-from .search_roots import build_search_roots
 from .formatting import (
     BOLD,
     CYAN,
@@ -26,6 +25,7 @@ from .report import (
     print_multi_threat_summary,
     print_source_refs,
 )
+from .search_roots import build_search_roots
 from .source_scanner import scan_source_and_configs
 from .threat_profile import (
     ThreatProfile,
@@ -59,11 +59,6 @@ def _parse_args() -> argparse.Namespace:
         "--list-threats",
         action="store_true",
         help="List all available threat profiles and exit",
-    )
-    parser.add_argument(
-        "--scan-path",
-        metavar="DIR",
-        help="Restrict scanning to this directory instead of system-wide search",
     )
     parser.add_argument(
         "--resolve-c2",
@@ -180,21 +175,6 @@ def main():
     if args.list_threats:
         _do_list_threats()
 
-    if args.scan_path:
-        scan_dir = Path(args.scan_path)
-        if not scan_dir.exists():
-            print(
-                f"Error: --scan-path does not exist: {args.scan_path}",
-                file=sys.stderr,
-            )
-            sys.exit(2)
-        if not scan_dir.is_dir():
-            print(
-                f"Error: --scan-path is not a directory: {args.scan_path}",
-                file=sys.stderr,
-            )
-            sys.exit(2)
-
     threats = _resolve_threats(args)
     if not threats:
         print("No threat profiles found. Nothing to scan.")
@@ -204,8 +184,6 @@ def main():
 
     print_banner(__version__)
     print(f"  {BOLD}Platform:{RESET} {policy.name}")
-    if args.scan_path:
-        print(f"  {BOLD}Scan path:{RESET} {args.scan_path}")
     print(f"  {BOLD}NOTE:{RESET} {policy.exclusion_note}\n")
 
     print(f"  {BOLD}Threat profiles ({len(threats)}):{RESET}")
@@ -222,10 +200,7 @@ def main():
     all_results: list[tuple[ThreatProfile, ScanResults]] = []
     for threat in threats:
         ecosystem = get_ecosystem(threat.ecosystem)
-        if args.scan_path:
-            roots = [args.scan_path]
-        else:
-            roots = build_search_roots(policy, ecosystem)
+        roots = build_search_roots(policy, ecosystem)
         results = _scan_single_threat(
             threat,
             policy,
