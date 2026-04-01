@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.1 — 2026-04-01
+
+### Fixed
+- **pnpm phantom dependency detection** — `pnpm-lock.yaml` is now parsed for phantom deps using line-anchored regex covering both v6 (`/name@version:`) and v9 (`name@version:`) key formats. Previously silently skipped.
+- **Stale README example** — removed orphaned "Scan only a specific project directory" comment left over from `--scan-path` removal.
+
+### Added
+- **Fast-path documented** in README Limitations: files not containing the package name are skipped entirely before line-by-line scanning.
+- 7 new pnpm phantom dep tests (v6, v9, not-found, missing file, dedup, full walk). 276 tests total.
+
 ## 0.6.0 — 2026-04-01
 
 ### Added
