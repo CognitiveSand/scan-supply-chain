@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.0 — 2026-04-01
+
+### Added
+- **Renamed to `scan-supply-chain`** — ecosystem-neutral package name on PyPI. `scan-litellm` CLI alias kept for backward compatibility.
+- **17 user stories** in `docs/stories/` covering both personas (Alice: SecOps, Bob: junior employee).
+- **Project requirements document** (`docs/project_requirements.md`) — 33 functional requirements, 16 non-functional requirements, INCOSE compliance checklist, full traceability matrix.
+- **`@req` traceability markers** on all 270 tests mapping to FRs and NFRs.
+- **42 new tests** closing all FR coverage gaps: C2 port matching (FR-15), npm lockfile structural parsing (FR-17), PyPI phantom deps (FR-18), non-TTY ANSI output (FR-27), Windows Registry/Tasks (FR-28/FR-29), CLI alias and packaging (FR-33, NFR-01, NFR-12).
+
+### Changed
+- **`--scan-path` removed** — a scoped scan could produce misleading "clean" verdicts by missing system-wide IOCs. The scanner now always inspects all known locations.
+- **Test coverage: 33/33 FRs, 5 NFRs** — zero gaps.
+
 ## 0.5.0 — 2026-04-01
 
 ### Fixed (from critique review)
