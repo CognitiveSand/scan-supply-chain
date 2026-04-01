@@ -311,6 +311,8 @@ def scan_iocs(
 
     _scan_windows_extras(results, threat)
 
+    from .cache_scanner import scan_caches
     from .persistence_scanner import scan_persistence
 
     scan_persistence(results, threat.package)
+    scan_caches(results, threat.package, threat.ecosystem)
