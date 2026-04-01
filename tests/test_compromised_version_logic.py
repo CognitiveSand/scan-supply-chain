@@ -3,8 +3,6 @@
 Module under test: scan_litellm_compromise.models
 """
 
-import pytest
-
 from scan_litellm_compromise.models import (
     ConfigReference,
     Installation,
@@ -19,7 +17,6 @@ from tests.conftest import LITELLM_COMPROMISED
 
 
 class TestCompromisedInstallationsFiltering:
-
     def test_version_1_82_7_is_compromised(self):
         results = ScanResults(
             compromised_versions=LITELLM_COMPROMISED,
@@ -93,7 +90,6 @@ class TestCompromisedInstallationsFiltering:
 
 
 class TestCompromisedConfigsFiltering:
-
     def test_pinned_to_1_82_7_is_compromised(self):
         results = ScanResults(
             compromised_versions=LITELLM_COMPROMISED,
@@ -150,7 +146,6 @@ class TestCompromisedConfigsFiltering:
 
 
 class TestScanResultsIsClean:
-
     def test_clean_when_no_issues(self):
         results = ScanResults(compromised_versions=LITELLM_COMPROMISED)
         assert results.is_clean is True
@@ -199,21 +194,24 @@ class TestScanResultsIsClean:
 
 
 class TestScanResultsFileDeduplication:
-
     def test_source_files_deduplicates_by_path(self):
-        results = ScanResults(source_refs=[
-            SourceReference("/app.py", 1, "import litellm"),
-            SourceReference("/app.py", 5, "litellm.completion()"),
-            SourceReference("/other.py", 3, "import litellm"),
-        ])
+        results = ScanResults(
+            source_refs=[
+                SourceReference("/app.py", 1, "import litellm"),
+                SourceReference("/app.py", 5, "litellm.completion()"),
+                SourceReference("/other.py", 3, "import litellm"),
+            ]
+        )
         assert results.source_files == {"/app.py", "/other.py"}
 
     def test_config_files_deduplicates_by_path(self):
-        results = ScanResults(config_refs=[
-            ConfigReference("r.txt", 1, "litellm==1.80", "1.80.0"),
-            ConfigReference("r.txt", 5, "litellm>=1.0", None),
-            ConfigReference("p.toml", 3, '"litellm"', None),
-        ])
+        results = ScanResults(
+            config_refs=[
+                ConfigReference("r.txt", 1, "litellm==1.80", "1.80.0"),
+                ConfigReference("r.txt", 5, "litellm>=1.0", None),
+                ConfigReference("p.toml", 3, '"litellm"', None),
+            ]
+        )
         assert results.config_files == {"r.txt", "p.toml"}
 
     def test_source_files_empty_when_no_refs(self):

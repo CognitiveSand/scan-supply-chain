@@ -26,13 +26,15 @@ class NpmPlugin:
 
     @property
     def config_filenames(self) -> frozenset[str]:
-        return frozenset({
-            "package.json",
-            "package-lock.json",
-            "yarn.lock",
-            "pnpm-lock.yaml",
-            ".npmrc",
-        })
+        return frozenset(
+            {
+                "package.json",
+                "package-lock.json",
+                "yarn.lock",
+                "pnpm-lock.yaml",
+                ".npmrc",
+            }
+        )
 
     @property
     def config_extensions(self) -> frozenset[str]:
@@ -98,7 +100,9 @@ class NpmPlugin:
             try:
                 result = subprocess.run(
                     ["npm", "root", "-g"],
-                    capture_output=True, text=True, timeout=5,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
                 )
                 if result.returncode == 0:
                     global_root = result.stdout.strip()
@@ -119,7 +123,9 @@ class NpmPlugin:
         return roots
 
     def find_phantom_deps(
-        self, names: list[str], search_roots: list[str],
+        self,
+        names: list[str],
+        search_roots: list[str],
     ) -> list[str]:
         """Check for phantom npm dependencies in node_modules."""
         if not names:
@@ -142,9 +148,7 @@ class NpmPlugin:
                                 resolved = str(phantom_dir.resolve())
                                 if resolved not in seen:
                                     seen.add(resolved)
-                                    found.append(
-                                        f"phantom:{name} at {phantom_dir}"
-                                    )
+                                    found.append(f"phantom:{name} at {phantom_dir}")
                     # Also check lockfiles in project directories
                     for fn in filenames:
                         if fn in ("package-lock.json", "yarn.lock"):
@@ -163,10 +167,16 @@ class NpmPlugin:
                                 pass
                     # Prune unproductive subtrees
                     dirnames[:] = [
-                        d for d in dirnames
-                        if d not in {
-                            ".git", "__pycache__", ".tox",
-                            "dist", "build", ".cache",
+                        d
+                        for d in dirnames
+                        if d
+                        not in {
+                            ".git",
+                            "__pycache__",
+                            ".tox",
+                            "dist",
+                            "build",
+                            ".cache",
                         }
                     ]
             except PermissionError:

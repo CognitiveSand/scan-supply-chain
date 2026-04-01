@@ -43,24 +43,18 @@ class ScanResults:
 
     @property
     def compromised_installations(self) -> list[Installation]:
-        return [
-            i for i in self.installations
-            if i.version in self.compromised_versions
-        ]
+        return [i for i in self.installations if i.version in self.compromised_versions]
 
     @property
     def compromised_configs(self) -> list[ConfigReference]:
         return [
-            r for r in self.config_refs
-            if r.pinned_version in self.compromised_versions
+            r for r in self.config_refs if r.pinned_version in self.compromised_versions
         ]
 
     @property
     def is_clean(self) -> bool:
         return not (
-            self.compromised_installations
-            or self.iocs
-            or self.compromised_configs
+            self.compromised_installations or self.iocs or self.compromised_configs
         )
 
     @property

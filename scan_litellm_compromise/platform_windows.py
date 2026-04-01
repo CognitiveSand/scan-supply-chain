@@ -48,8 +48,7 @@ class WindowsPolicy:
     @property
     def exclusion_note(self) -> str:
         return (
-            "Scanning user-accessible paths "
-            "(%USERPROFILE%, %APPDATA%, Program Files)."
+            "Scanning user-accessible paths (%USERPROFILE%, %APPDATA%, Program Files)."
         )
 
     def home_conda_dirs(self) -> list[str]:

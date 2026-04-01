@@ -22,19 +22,21 @@ class PyPIPlugin:
 
     @property
     def config_filenames(self) -> frozenset[str]:
-        return frozenset({
-            "pyproject.toml",
-            "setup.cfg",
-            "setup.py",
-            "requirements.txt",
-            "requirements-dev.txt",
-            "requirements-prod.txt",
-            "Pipfile",
-            "Pipfile.lock",
-            "poetry.lock",
-            "pdm.lock",
-            "uv.lock",
-        })
+        return frozenset(
+            {
+                "pyproject.toml",
+                "setup.cfg",
+                "setup.py",
+                "requirements.txt",
+                "requirements-dev.txt",
+                "requirements-prod.txt",
+                "Pipfile",
+                "Pipfile.lock",
+                "poetry.lock",
+                "pdm.lock",
+                "uv.lock",
+            }
+        )
 
     @property
     def config_extensions(self) -> frozenset[str]:
@@ -42,9 +44,7 @@ class PyPIPlugin:
 
     def metadata_dir_pattern(self, package: str) -> re.Pattern:
         escaped = re.escape(package)
-        return re.compile(
-            rf"^{escaped}-([^/\\]+)\.(dist-info|egg-info)$"
-        )
+        return re.compile(rf"^{escaped}-([^/\\]+)\.(dist-info|egg-info)$")
 
     def extract_version(self, metadata_path: Path) -> str | None:
         """Read Version from METADATA or PKG-INFO; fallback to dir name."""
@@ -93,9 +93,7 @@ class PyPIPlugin:
 
     def pinned_version_pattern(self, package: str) -> re.Pattern:
         escaped = re.escape(package)
-        return re.compile(
-            rf"(?<![a-zA-Z0-9_-]){escaped}\s*==\s*([0-9][0-9a-zA-Z.*]+)"
-        )
+        return re.compile(rf"(?<![a-zA-Z0-9_-]){escaped}\s*==\s*([0-9][0-9a-zA-Z.*]+)")
 
     def config_filename_pattern(self) -> re.Pattern | None:
         return re.compile(r"^requirements.*\.txt$")
@@ -104,7 +102,9 @@ class PyPIPlugin:
         return []
 
     def find_phantom_deps(
-        self, names: list[str], search_roots: list[str],
+        self,
+        names: list[str],
+        search_roots: list[str],
     ) -> list[str]:
         """Check for phantom PyPI packages in site-packages."""
         if not names:
@@ -123,9 +123,7 @@ class PyPIPlugin:
                         for d in dirnames:
                             if pattern.match(d):
                                 full = Path(dirpath) / d
-                                found.append(
-                                    f"phantom:{name} at {full}"
-                                )
+                                found.append(f"phantom:{name} at {full}")
             except PermissionError:
                 logger.debug("Permission denied walking %s", root)
         return found
@@ -134,11 +132,13 @@ class PyPIPlugin:
 def _walk_site_packages(root: Path):
     """Walk looking for site-packages, then check contents."""
     import os
+
     for dirpath, dirnames, filenames in os.walk(root):
         if Path(dirpath).name == "site-packages":
             yield dirpath, dirnames, filenames
         # Prune non-productive subtrees
         dirnames[:] = [
-            d for d in dirnames
+            d
+            for d in dirnames
             if d not in {"__pycache__", ".git", "node_modules", ".tox"}
         ]

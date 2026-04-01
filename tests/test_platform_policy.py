@@ -19,7 +19,6 @@ from scan_litellm_compromise.platform_policy import detect_platform
 
 
 class TestDetectPlatform:
-
     def test_returns_linux_policy_on_linux(self, monkeypatch):
         monkeypatch.setattr(sys, "platform", "linux")
         policy = detect_platform()
@@ -40,7 +39,6 @@ class TestDetectPlatform:
 
 
 class TestLinuxPolicy:
-
     @pytest.fixture
     def policy(self):
         return LinuxPolicy()
@@ -73,7 +71,6 @@ class TestLinuxPolicy:
 
 
 class TestDarwinPolicy:
-
     @pytest.fixture
     def policy(self):
         return DarwinPolicy()
@@ -105,7 +102,6 @@ class TestDarwinPolicy:
 
 
 class TestWindowsPolicy:
-
     @pytest.fixture
     def policy(self, monkeypatch):
         monkeypatch.setenv("USERPROFILE", "/tmp/fakehome")
@@ -115,6 +111,7 @@ class TestWindowsPolicy:
         monkeypatch.setenv("ProgramFiles", "/tmp/Program Files")
 
         from scan_litellm_compromise.platform_windows import WindowsPolicy
+
         return WindowsPolicy()
 
     def test_name_is_windows(self, policy):

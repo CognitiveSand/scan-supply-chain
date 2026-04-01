@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 def _check_registry_run_keys(
-    results, keywords: list[str],
+    results,
+    keywords: list[str],
 ) -> None:
     """Check HKCU and HKLM Run keys for suspicious entries."""
     if not keywords:
@@ -49,7 +50,8 @@ def _check_registry_run_keys(
 
 
 def _check_scheduled_tasks(
-    results, keywords: list[str],
+    results,
+    keywords: list[str],
 ) -> None:
     """Check Task Scheduler for suspicious tasks."""
     if not keywords:

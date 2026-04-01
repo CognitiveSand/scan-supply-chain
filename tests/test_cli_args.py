@@ -3,13 +3,10 @@
 Module under test: scan_litellm_compromise.scanner._parse_args
 """
 
-import pytest
-
 from scan_litellm_compromise.scanner import _parse_args
 
 
 class TestParseArgs:
-
     def test_defaults_when_no_args(self, monkeypatch):
         monkeypatch.setattr("sys.argv", ["scan-litellm"])
         args = _parse_args()
@@ -35,7 +32,9 @@ class TestParseArgs:
         assert args.threat == "litellm-2026-03"
 
     def test_threat_file_path(self, monkeypatch):
-        monkeypatch.setattr("sys.argv", ["scan-litellm", "--threat-file", "/tmp/t.toml"])
+        monkeypatch.setattr(
+            "sys.argv", ["scan-litellm", "--threat-file", "/tmp/t.toml"]
+        )
         args = _parse_args()
         assert args.threat_file == "/tmp/t.toml"
 

@@ -13,14 +13,13 @@ from scan_litellm_compromise.ecosystem_pypi import PyPIPlugin
 from scan_litellm_compromise.ecosystem_npm import NpmPlugin
 from scan_litellm_compromise.models import ScanResults
 from scan_litellm_compromise.version_checker import scan_environments
-from tests.conftest import LITELLM_COMPROMISED, make_litellm_threat, make_axios_threat
+from tests.conftest import make_litellm_threat
 
 
 # ── PyPI: extract_version ─────────────────────────────────────────────
 
 
 class TestPyPIExtractVersion:
-
     @pytest.fixture
     def plugin(self):
         return PyPIPlugin()
@@ -69,10 +68,18 @@ class TestPyPIExtractVersion:
         (dist_info / "METADATA").write_text("Version:  1.82.7  \n")
         assert plugin.extract_version(dist_info) == "1.82.7"
 
-    @pytest.mark.parametrize("version", [
-        "1.82.7", "1.82.8", "0.0.1", "2.0.0a1", "1.82.7.post1",
-        "1.82.7.dev0", "1.82.7rc1",
-    ])
+    @pytest.mark.parametrize(
+        "version",
+        [
+            "1.82.7",
+            "1.82.8",
+            "0.0.1",
+            "2.0.0a1",
+            "1.82.7.post1",
+            "1.82.7.dev0",
+            "1.82.7rc1",
+        ],
+    )
     def test_handles_various_version_formats(self, tmp_path, plugin, version):
         dist_info = tmp_path / f"litellm-{version}.dist-info"
         dist_info.mkdir()
@@ -84,7 +91,6 @@ class TestPyPIExtractVersion:
 
 
 class TestNpmExtractVersion:
-
     @pytest.fixture
     def plugin(self):
         return NpmPlugin()
@@ -119,7 +125,6 @@ class TestNpmExtractVersion:
 
 
 class TestScanEnvironments:
-
     def test_reports_compromised_installation(self, tmp_path, capsys):
         dist_info = tmp_path / "litellm-1.82.7.dist-info"
         dist_info.mkdir()

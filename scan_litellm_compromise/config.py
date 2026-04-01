@@ -6,18 +6,20 @@ threat_profile.py.  This module holds only ecosystem-neutral defaults.
 """
 
 # Directories always skipped during any filesystem walk
-_COMMON_SKIP_DIRS = frozenset({
-    "__pycache__",
-    ".git",
-    ".tox",
-    ".mypy_cache",
-    ".pytest_cache",
-    ".venv-bak",
-    "dist",
-    "build",
-    ".eggs",
-    ".cache",
-})
+_COMMON_SKIP_DIRS = frozenset(
+    {
+        "__pycache__",
+        ".git",
+        ".tox",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".venv-bak",
+        "dist",
+        "build",
+        ".eggs",
+        ".cache",
+    }
+)
 
 # Phase 1/2 discovery needs to enter site-packages / node_modules
 DISCOVERY_SKIP_DIRS = _COMMON_SKIP_DIRS

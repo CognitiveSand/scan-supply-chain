@@ -63,7 +63,9 @@ class EcosystemPlugin(Protocol):
         ...
 
     def find_phantom_deps(
-        self, names: list[str], search_roots: list[str],
+        self,
+        names: list[str],
+        search_roots: list[str],
     ) -> list[str]:
         """Check for phantom dependencies that should not exist.
 
@@ -76,8 +78,10 @@ def get_ecosystem(ecosystem_name: str) -> EcosystemPlugin:
     """Factory: return the correct plugin for the ecosystem name."""
     if ecosystem_name == "pypi":
         from .ecosystem_pypi import PyPIPlugin
+
         return PyPIPlugin()
     if ecosystem_name == "npm":
         from .ecosystem_npm import NpmPlugin
+
         return NpmPlugin()
     raise ValueError(f"Unknown ecosystem: {ecosystem_name!r}")

@@ -40,7 +40,9 @@ def _expand_path(raw: str) -> Path:
 
 
 def _check_known_paths(
-    description: str, paths: Iterable[Path], results: ScanResults,
+    description: str,
+    paths: Iterable[Path],
+    results: ScanResults,
 ) -> None:
     """Check a list of known paths for IOC artifacts."""
     print_check_header(description)
@@ -105,7 +107,8 @@ def _scan_walk_files(
 
 
 def _scan_known_paths(
-    results: ScanResults, threat: ThreatProfile,
+    results: ScanResults,
+    threat: ThreatProfile,
 ) -> None:
     """Check per-platform known paths from the threat profile."""
     for kp in threat.known_paths:
@@ -115,9 +118,7 @@ def _scan_known_paths(
 
 def _resolve_c2_ips(threat: ThreatProfile, resolve_dns: bool) -> dict[str, list[str]]:
     """Build domain -> IPs mapping. Uses known IPs; optionally adds live DNS."""
-    result: dict[str, list[str]] = {
-        d: list(ips) for d, ips in threat.c2.ips.items()
-    }
+    result: dict[str, list[str]] = {d: list(ips) for d, ips in threat.c2.ips.items()}
     if resolve_dns:
         for domain in threat.c2.domains:
             try:
@@ -163,10 +164,7 @@ def _scan_for_c2_connections(
         for domain, ips in domain_ips.items():
             for ip in ips:
                 if ip in socket_output:
-                    print(
-                        f"  {RED}{BOLD}! ACTIVE CONNECTION "
-                        f"to {domain} ({ip}){RESET}"
-                    )
+                    print(f"  {RED}{BOLD}! ACTIVE CONNECTION to {domain} ({ip}){RESET}")
                     results.iocs.append(f"connection:{domain}:{ip}")
                     found = True
                     break  # one match per domain is enough
@@ -228,7 +226,8 @@ def _scan_phantom_deps(
     roots = [scan_path] if scan_path else policy.search_roots
     print_check_header("phantom dependencies (should not exist)")
     found_iocs = ecosystem.find_phantom_deps(
-        threat.phantom_deps, roots,
+        threat.phantom_deps,
+        roots,
     )
     if found_iocs:
         for ioc in found_iocs:
@@ -239,10 +238,12 @@ def _scan_phantom_deps(
 
 
 def _scan_windows_extras(
-    results: ScanResults, threat: ThreatProfile,
+    results: ScanResults,
+    threat: ThreatProfile,
 ) -> None:
     """Run Windows-specific IOC checks if applicable."""
     import sys
+
     if sys.platform != "win32":
         return
 
@@ -252,6 +253,7 @@ def _scan_windows_extras(
         return
 
     from .ioc_windows import run_windows_ioc_checks
+
     run_windows_ioc_checks(results, registry_kw, schtask_kw)
 
 
@@ -280,7 +282,11 @@ def scan_iocs(
     _scan_for_malicious_pods(results, threat)
 
     _scan_phantom_deps(
-        results, threat, ecosystem, policy, scan_path=scan_path,
+        results,
+        threat,
+        ecosystem,
+        policy,
+        scan_path=scan_path,
     )
 
     _scan_windows_extras(results, threat)

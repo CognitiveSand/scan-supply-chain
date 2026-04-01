@@ -3,8 +3,6 @@
 Module under test: scan_litellm_compromise.report
 """
 
-import pytest
-
 from scan_litellm_compromise.models import (
     ConfigReference,
     Installation,
@@ -25,7 +23,6 @@ from tests.conftest import LITELLM_COMPROMISED, make_litellm_threat
 
 
 class TestPrintSourceRefs:
-
     def test_prints_clean_message_when_no_refs(self, capsys):
         print_source_refs([], "litellm")
         captured = capsys.readouterr().out
@@ -44,10 +41,7 @@ class TestPrintSourceRefs:
         assert "/b.py" in captured
 
     def test_truncates_long_file_lists(self, capsys):
-        refs = [
-            SourceReference("/a.py", i, f"line{i}")
-            for i in range(1, 10)
-        ]
+        refs = [SourceReference("/a.py", i, f"line{i}") for i in range(1, 10)]
         print_source_refs(refs, "litellm")
         captured = capsys.readouterr().out
         assert "more references" in captured
@@ -57,7 +51,6 @@ class TestPrintSourceRefs:
 
 
 class TestPrintConfigRefs:
-
     def test_prints_clean_message_when_no_refs(self, capsys):
         print_config_refs([], "litellm", LITELLM_COMPROMISED)
         captured = capsys.readouterr().out
@@ -84,7 +77,6 @@ class TestPrintConfigRefs:
 
 
 class TestPrintThreatReport:
-
     def test_prints_clean_verdict(self, capsys):
         threat = make_litellm_threat()
         results = ScanResults(compromised_versions=LITELLM_COMPROMISED)
@@ -128,7 +120,6 @@ class TestPrintThreatReport:
 
 
 class TestPrintMultiThreatSummary:
-
     def test_all_clean(self, capsys):
         threat = make_litellm_threat()
         results = ScanResults(compromised_versions=LITELLM_COMPROMISED)

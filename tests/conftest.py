@@ -60,6 +60,7 @@ class StubEcosystem:
 
     def metadata_dir_pattern(self, package):
         import re
+
         return re.compile(rf"^{re.escape(package)}-([^/\\]+)\.(dist-info|egg-info)$")
 
     def extract_version(self, metadata_path):
@@ -73,6 +74,7 @@ class StubEcosystem:
 
     def pinned_version_pattern(self, package):
         import re
+
         return re.compile(rf"{re.escape(package)}==([0-9][0-9a-zA-Z.*]+)")
 
     def config_filename_pattern(self):
@@ -111,7 +113,9 @@ def make_litellm_threat(**overrides) -> ThreatProfile:
             WalkFileIOC(
                 description="litellm_init.pth (auto-exec backdoor)",
                 filenames=["litellm_init.pth"],
-                sha256=["71e35aef03099cd1f2d6446734273025a163597de93912df321ef118bf135238"],
+                sha256=[
+                    "71e35aef03099cd1f2d6446734273025a163597de93912df321ef118bf135238"
+                ],
             ),
         ],
         known_paths=[

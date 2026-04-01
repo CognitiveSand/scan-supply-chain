@@ -60,10 +60,13 @@ def detect_platform() -> PlatformPolicy:
     """Return the correct PlatformPolicy for the current OS."""
     if sys.platform == "win32":
         from .platform_windows import WindowsPolicy
+
         return WindowsPolicy()
     elif sys.platform == "darwin":
         from .platform_darwin import DarwinPolicy
+
         return DarwinPolicy()
     else:
         from .platform_linux import LinuxPolicy
+
         return LinuxPolicy()

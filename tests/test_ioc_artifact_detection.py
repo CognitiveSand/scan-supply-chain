@@ -7,7 +7,6 @@ import socket
 import subprocess
 from pathlib import Path
 
-import pytest
 
 from scan_litellm_compromise.ioc_scanner import (
     _check_known_paths,
@@ -24,7 +23,6 @@ from tests.conftest import StubPolicy, make_litellm_threat
 
 
 class TestCheckKnownPaths:
-
     def test_flags_existing_path_as_ioc(self, tmp_path, capsys):
         ioc_file = tmp_path / "pglog"
         ioc_file.write_text("exfil data")
@@ -49,7 +47,9 @@ class TestCheckKnownPaths:
 
         results = ScanResults()
         _check_known_paths(
-            "test", [tmp_path / "pglog", tmp_path / ".pg_state"], results,
+            "test",
+            [tmp_path / "pglog", tmp_path / ".pg_state"],
+            results,
         )
 
         assert len(results.iocs) == 2
@@ -70,7 +70,6 @@ class TestCheckKnownPaths:
 
 
 class TestScanWalkFiles:
-
     def test_finds_litellm_init_pth(self, tmp_path, capsys):
         site_pkg = tmp_path / "lib" / "site-packages"
         site_pkg.mkdir(parents=True)
@@ -78,12 +77,15 @@ class TestScanWalkFiles:
 
         # Use walk_files with no sha256 requirement so any matching filename is flagged
         from scan_litellm_compromise.threat_profile import WalkFileIOC
+
         threat = make_litellm_threat(
-            walk_files=[WalkFileIOC(
-                description="litellm_init.pth (auto-exec backdoor)",
-                filenames=["litellm_init.pth"],
-                sha256=[],
-            )],
+            walk_files=[
+                WalkFileIOC(
+                    description="litellm_init.pth (auto-exec backdoor)",
+                    filenames=["litellm_init.pth"],
+                    sha256=[],
+                )
+            ],
         )
         policy = StubPolicy()
         policy.search_roots = [str(tmp_path)]
@@ -122,12 +124,15 @@ class TestScanWalkFiles:
         (tmp_path / "litellm_init.pth").write_text("import os")
 
         from scan_litellm_compromise.threat_profile import WalkFileIOC
+
         threat = make_litellm_threat(
-            walk_files=[WalkFileIOC(
-                description="litellm_init.pth (auto-exec backdoor)",
-                filenames=["litellm_init.pth"],
-                sha256=[],
-            )],
+            walk_files=[
+                WalkFileIOC(
+                    description="litellm_init.pth (auto-exec backdoor)",
+                    filenames=["litellm_init.pth"],
+                    sha256=[],
+                )
+            ],
         )
         policy = StubPolicy()
         policy.search_roots = ["/should/not/be/used"]
@@ -142,7 +147,6 @@ class TestScanWalkFiles:
 
 
 class TestResolveC2Ips:
-
     def test_returns_known_ips_when_dns_disabled(self):
         threat = make_litellm_threat()
         result = _resolve_c2_ips(threat, resolve_dns=False)
@@ -210,7 +214,6 @@ class TestResolveC2Ips:
 
 
 class TestScanForC2Connections:
-
     def _stub_ss(self, monkeypatch, stdout):
         stdout_bytes = stdout.encode() if isinstance(stdout, str) else stdout
         monkeypatch.setattr(
@@ -220,7 +223,9 @@ class TestScanForC2Connections:
         monkeypatch.setattr(
             "scan_litellm_compromise.ioc_scanner.subprocess.run",
             lambda *a, **kw: subprocess.CompletedProcess(
-                args=a[0], returncode=0, stdout=stdout_bytes,
+                args=a[0],
+                returncode=0,
+                stdout=stdout_bytes,
             ),
         )
 
@@ -303,7 +308,6 @@ class TestScanForC2Connections:
 
 
 class TestScanForMaliciousPods:
-
     def test_flags_node_setup_pods(self, monkeypatch, capsys):
         monkeypatch.setattr(
             "scan_litellm_compromise.ioc_scanner.shutil.which",
@@ -312,7 +316,8 @@ class TestScanForMaliciousPods:
         monkeypatch.setattr(
             "scan_litellm_compromise.ioc_scanner.subprocess.run",
             lambda *a, **kw: subprocess.CompletedProcess(
-                args=a[0], returncode=0,
+                args=a[0],
+                returncode=0,
                 stdout="node-setup-abc123  1/1  Running  0  2h\nkube-proxy-xyz  1/1  Running  0  5d\n",
             ),
         )
@@ -332,7 +337,8 @@ class TestScanForMaliciousPods:
         monkeypatch.setattr(
             "scan_litellm_compromise.ioc_scanner.subprocess.run",
             lambda *a, **kw: subprocess.CompletedProcess(
-                args=a[0], returncode=0,
+                args=a[0],
+                returncode=0,
                 stdout="kube-proxy-xyz  1/1  Running  0  5d\n",
             ),
         )

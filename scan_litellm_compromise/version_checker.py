@@ -48,9 +48,7 @@ def scan_environments(
             logger.debug("Could not determine version from %s", metadata_dir)
             continue
 
-        installation = Installation(
-            env_path=str(metadata_dir), version=version
-        )
+        installation = Installation(env_path=str(metadata_dir), version=version)
         results.installations.append(installation)
         _report_installation(installation, threat.package, threat.compromised)
 

@@ -8,11 +8,10 @@ import pytest
 from scan_litellm_compromise.ecosystem_pypi import PyPIPlugin
 from scan_litellm_compromise.models import ScanResults
 from scan_litellm_compromise.source_scanner import scan_source_and_configs
-from tests.conftest import LITELLM_COMPROMISED, StubPolicy, make_litellm_threat
+from tests.conftest import StubPolicy, make_litellm_threat
 
 
 class TestScanSourceAndConfigs:
-
     @pytest.fixture
     def setup(self, tmp_path):
         policy = StubPolicy()
@@ -27,7 +26,9 @@ class TestScanSourceAndConfigs:
         py_file = tmp_path / "app.py"
         py_file.write_text("import litellm\nlitellm.completion('hi')\n")
 
-        scan_source_and_configs(results, threat, ecosystem, policy, scan_path=str(tmp_path))
+        scan_source_and_configs(
+            results, threat, ecosystem, policy, scan_path=str(tmp_path)
+        )
 
         assert len(results.source_refs) >= 1
         assert any("import litellm" in r.line_content for r in results.source_refs)
@@ -37,7 +38,9 @@ class TestScanSourceAndConfigs:
         req_file = tmp_path / "requirements.txt"
         req_file.write_text("flask==3.0\nlitellm==1.82.7\n")
 
-        scan_source_and_configs(results, threat, ecosystem, policy, scan_path=str(tmp_path))
+        scan_source_and_configs(
+            results, threat, ecosystem, policy, scan_path=str(tmp_path)
+        )
 
         assert len(results.config_refs) >= 1
         assert any(r.pinned_version == "1.82.7" for r in results.config_refs)
@@ -47,7 +50,9 @@ class TestScanSourceAndConfigs:
         toml_file = tmp_path / "pyproject.toml"
         toml_file.write_text('[project]\ndependencies = ["litellm>=1.80"]\n')
 
-        scan_source_and_configs(results, threat, ecosystem, policy, scan_path=str(tmp_path))
+        scan_source_and_configs(
+            results, threat, ecosystem, policy, scan_path=str(tmp_path)
+        )
 
         assert len(results.config_refs) >= 1
 
@@ -57,7 +62,11 @@ class TestScanSourceAndConfigs:
         py_file.write_text("import flask\nflask.run()\n")
 
         count = scan_source_and_configs(
-            results, threat, ecosystem, policy, scan_path=str(tmp_path),
+            results,
+            threat,
+            ecosystem,
+            policy,
+            scan_path=str(tmp_path),
         )
 
         assert results.source_refs == []
@@ -67,7 +76,11 @@ class TestScanSourceAndConfigs:
         tmp_path, policy, ecosystem, threat, results = setup
         # Even if litellm is in scanner's own source, it should be excluded
         count = scan_source_and_configs(
-            results, threat, ecosystem, policy, scan_path=str(tmp_path),
+            results,
+            threat,
+            ecosystem,
+            policy,
+            scan_path=str(tmp_path),
         )
         # Just verify it doesn't crash
         assert count >= 0
@@ -78,7 +91,11 @@ class TestScanSourceAndConfigs:
         (tmp_path / "b.py").write_text("y = 2\n")
 
         count = scan_source_and_configs(
-            results, threat, ecosystem, policy, scan_path=str(tmp_path),
+            results,
+            threat,
+            ecosystem,
+            policy,
+            scan_path=str(tmp_path),
         )
 
         assert count == 2
@@ -90,7 +107,11 @@ class TestScanSourceAndConfigs:
         (sp / "something.py").write_text("import litellm\n")
 
         scan_source_and_configs(
-            results, threat, ecosystem, policy, scan_path=str(tmp_path),
+            results,
+            threat,
+            ecosystem,
+            policy,
+            scan_path=str(tmp_path),
         )
 
         # site-packages should be skipped in source scanning
@@ -102,7 +123,11 @@ class TestScanSourceAndConfigs:
 
         # Should not crash
         scan_source_and_configs(
-            results, threat, ecosystem, policy, scan_path=str(tmp_path),
+            results,
+            threat,
+            ecosystem,
+            policy,
+            scan_path=str(tmp_path),
         )
 
     def test_deduplicates_by_realpath(self, setup, capsys):
@@ -113,7 +138,11 @@ class TestScanSourceAndConfigs:
         link.symlink_to(real_file)
 
         scan_source_and_configs(
-            results, threat, ecosystem, policy, scan_path=str(tmp_path),
+            results,
+            threat,
+            ecosystem,
+            policy,
+            scan_path=str(tmp_path),
         )
 
         # Should deduplicate — only count real.py once

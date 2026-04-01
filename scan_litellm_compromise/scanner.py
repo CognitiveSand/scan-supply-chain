@@ -8,7 +8,15 @@ from pathlib import Path
 from . import __version__
 from .discovery import find_package_metadata
 from .ecosystem_base import get_ecosystem
-from .formatting import BOLD, CYAN, RESET, YELLOW, print_banner, print_phase_header, print_separator
+from .formatting import (
+    BOLD,
+    CYAN,
+    RESET,
+    YELLOW,
+    print_banner,
+    print_phase_header,
+    print_separator,
+)
 from .ioc_scanner import scan_iocs
 from .models import ScanResults
 from .platform_policy import detect_platform
@@ -118,9 +126,7 @@ def _scan_single_threat(
     results = ScanResults(compromised_versions=threat.compromised)
 
     print_separator()
-    print(
-        f"\n{BOLD}Scanning for: {threat.name}{RESET}"
-    )
+    print(f"\n{BOLD}Scanning for: {threat.name}{RESET}")
     print(f"  Package: {threat.package} ({threat.ecosystem.upper()})")
     compromised_str = ", ".join(sorted(threat.compromised))
     print(f"  Compromised versions: {compromised_str}\n")
@@ -128,7 +134,10 @@ def _scan_single_threat(
     # Phase 1: Discover installations
     print_phase_header(1, f"Discovering {threat.package} installations...")
     metadata_dirs = find_package_metadata(
-        policy, ecosystem, threat.package, scan_path=scan_path,
+        policy,
+        ecosystem,
+        threat.package,
+        scan_path=scan_path,
     )
     print(
         f"  Found {BOLD}{len(metadata_dirs)}{RESET} "
@@ -138,28 +147,40 @@ def _scan_single_threat(
     # Phase 2: Check versions
     print_separator()
     print_phase_header(
-        2, f"Checking {threat.package} versions from metadata...",
+        2,
+        f"Checking {threat.package} versions from metadata...",
     )
     scan_environments(metadata_dirs, results, ecosystem, threat)
 
     # Phase 3: IOC artifact scan
     print_phase_header(3, "Scanning for IOC artifacts...")
     scan_iocs(
-        results, threat, ecosystem, policy,
-        resolve_c2=resolve_c2, scan_path=scan_path,
+        results,
+        threat,
+        ecosystem,
+        policy,
+        resolve_c2=resolve_c2,
+        scan_path=scan_path,
     )
 
     # Phase 4: Source & config scan
     print_phase_header(
-        4, f"Scanning source files for {threat.package} usage...",
+        4,
+        f"Scanning source files for {threat.package} usage...",
     )
     files_scanned = scan_source_and_configs(
-        results, threat, ecosystem, policy, scan_path=scan_path,
+        results,
+        threat,
+        ecosystem,
+        policy,
+        scan_path=scan_path,
     )
     print(f"  Files scanned: {BOLD}{files_scanned}{RESET}\n")
     print_source_refs(results.source_refs, threat.package)
     print_config_refs(
-        results.config_refs, threat.package, threat.compromised,
+        results.config_refs,
+        threat.package,
+        threat.compromised,
     )
 
     return results
@@ -203,7 +224,10 @@ def main():
     all_results: list[tuple[ThreatProfile, ScanResults]] = []
     for threat in threats:
         results = _scan_single_threat(
-            threat, policy, args.scan_path, args.resolve_c2,
+            threat,
+            policy,
+            args.scan_path,
+            args.resolve_c2,
         )
         all_results.append((threat, results))
 

@@ -148,9 +148,7 @@ def scan_source_and_configs(
             continue
         try:
             for dirpath, dirnames, filenames in os.walk(root_path):
-                dirnames[:] = [
-                    d for d in dirnames if d not in SOURCE_SCAN_SKIP_DIRS
-                ]
+                dirnames[:] = [d for d in dirnames if d not in SOURCE_SCAN_SKIP_DIRS]
                 dir_path = Path(dirpath)
 
                 for filename in filenames:
@@ -158,8 +156,11 @@ def scan_source_and_configs(
                     extension = file_path.suffix.lower()
                     is_source = extension in source_exts
                     is_config = _is_config_file(
-                        filename, extension,
-                        config_names, config_exts, cfg_fn_pattern,
+                        filename,
+                        extension,
+                        config_names,
+                        config_exts,
+                        cfg_fn_pattern,
                     )
 
                     if not is_source and not is_config:
@@ -175,8 +176,13 @@ def scan_source_and_configs(
 
                     files_scanned += 1
                     _scan_file_lines(
-                        file_path, is_source, results,
-                        threat.package, import_pats, dep_pats, pinned_pat,
+                        file_path,
+                        is_source,
+                        results,
+                        threat.package,
+                        import_pats,
+                        dep_pats,
+                        pinned_pat,
                     )
         except PermissionError:
             logger.debug("Permission denied walking %s", root)

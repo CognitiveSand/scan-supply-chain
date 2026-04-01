@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 def _build_search_roots(
-    policy: PlatformPolicy, ecosystem: EcosystemPlugin,
+    policy: PlatformPolicy,
+    ecosystem: EcosystemPlugin,
 ) -> list[str]:
     """Combine platform roots with user-local conda/pipx/ecosystem dirs."""
     roots = list(policy.search_roots)
@@ -42,7 +43,9 @@ def _build_search_roots(
 
 
 def _walk_for_metadata(
-    root: Path, metadata_pattern, package: str,
+    root: Path,
+    metadata_pattern,
+    package: str,
 ) -> list[Path]:
     """Walk a directory tree looking for package metadata directories."""
     found = []
@@ -58,7 +61,8 @@ def _walk_for_metadata(
 
 
 def _walk_for_node_modules(
-    root: Path, package: str,
+    root: Path,
+    package: str,
 ) -> list[Path]:
     """Walk a directory tree looking for node_modules/{package}/."""
     found = []
@@ -115,8 +119,6 @@ def find_package_metadata(
         for root in roots:
             root_path = Path(root)
             if root_path.is_dir():
-                found.extend(
-                    _walk_for_metadata(root_path, metadata_pattern, package)
-                )
+                found.extend(_walk_for_metadata(root_path, metadata_pattern, package))
 
     return _deduplicate_by_realpath(found)

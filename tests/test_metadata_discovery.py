@@ -3,10 +3,6 @@
 Module under test: scan_litellm_compromise.discovery
 """
 
-import os
-
-import pytest
-
 from scan_litellm_compromise.discovery import (
     _deduplicate_by_realpath,
     _walk_for_metadata,
@@ -15,14 +11,13 @@ from scan_litellm_compromise.discovery import (
 )
 from scan_litellm_compromise.ecosystem_pypi import PyPIPlugin
 
-from tests.conftest import StubEcosystem, StubPolicy
+from tests.conftest import StubPolicy
 
 
 # ── _walk_for_metadata (PyPI filesystem) ──────────────────────────────
 
 
 class TestWalkForMetadata:
-
     def test_finds_dist_info_in_site_packages(self, tmp_path):
         dist_info = tmp_path / "lib" / "site-packages" / "litellm-1.82.7.dist-info"
         dist_info.mkdir(parents=True)
@@ -51,7 +46,9 @@ class TestWalkForMetadata:
         assert result == []
 
     def test_returns_empty_for_directory_without_package(self, tmp_path):
-        (tmp_path / "lib" / "site-packages" / "requests-2.31.dist-info").mkdir(parents=True)
+        (tmp_path / "lib" / "site-packages" / "requests-2.31.dist-info").mkdir(
+            parents=True
+        )
 
         pattern = PyPIPlugin().metadata_dir_pattern("litellm")
         result = _walk_for_metadata(tmp_path, pattern, "litellm")
@@ -71,7 +68,9 @@ class TestWalkForMetadata:
         def walk_that_raises(path, **kwargs):
             raise PermissionError("denied")
 
-        monkeypatch.setattr("scan_litellm_compromise.discovery.os.walk", walk_that_raises)
+        monkeypatch.setattr(
+            "scan_litellm_compromise.discovery.os.walk", walk_that_raises
+        )
 
         pattern = PyPIPlugin().metadata_dir_pattern("litellm")
         result = _walk_for_metadata(tmp_path, pattern, "litellm")
@@ -83,7 +82,6 @@ class TestWalkForMetadata:
 
 
 class TestWalkForNodeModules:
-
     def test_finds_axios_in_node_modules(self, tmp_path):
         pkg_dir = tmp_path / "project" / "node_modules" / "axios"
         pkg_dir.mkdir(parents=True)
@@ -120,7 +118,6 @@ class TestWalkForNodeModules:
 
 
 class TestDeduplicateByRealpath:
-
     def test_removes_symlink_duplicates(self, tmp_path):
         real_dir = tmp_path / "real" / "litellm-1.82.7.dist-info"
         real_dir.mkdir(parents=True)
@@ -147,7 +144,6 @@ class TestDeduplicateByRealpath:
 
 
 class TestFindPackageMetadata:
-
     def test_finds_pypi_package_from_policy_roots(self, tmp_path, monkeypatch):
         site_pkg = tmp_path / "lib" / "site-packages"
         (site_pkg / "litellm-1.82.7.dist-info").mkdir(parents=True)
@@ -156,7 +152,9 @@ class TestFindPackageMetadata:
         policy.search_roots = [str(tmp_path)]
         ecosystem = PyPIPlugin()
 
-        monkeypatch.setattr("scan_litellm_compromise.discovery.Path.home", lambda: tmp_path / "fakehome")
+        monkeypatch.setattr(
+            "scan_litellm_compromise.discovery.Path.home", lambda: tmp_path / "fakehome"
+        )
         (tmp_path / "fakehome").mkdir()
 
         result = find_package_metadata(policy, ecosystem, "litellm")
@@ -170,7 +168,9 @@ class TestFindPackageMetadata:
         policy.search_roots = [str(tmp_path)]
         ecosystem = PyPIPlugin()
 
-        monkeypatch.setattr("scan_litellm_compromise.discovery.Path.home", lambda: tmp_path / "fakehome")
+        monkeypatch.setattr(
+            "scan_litellm_compromise.discovery.Path.home", lambda: tmp_path / "fakehome"
+        )
         (tmp_path / "fakehome").mkdir()
 
         result = find_package_metadata(policy, ecosystem, "litellm")
@@ -186,7 +186,10 @@ class TestFindPackageMetadata:
         ecosystem = PyPIPlugin()
 
         result = find_package_metadata(
-            policy, ecosystem, "litellm", scan_path=str(target),
+            policy,
+            ecosystem,
+            "litellm",
+            scan_path=str(target),
         )
 
         assert len(result) == 1

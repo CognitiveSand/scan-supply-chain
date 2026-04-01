@@ -16,10 +16,14 @@ _MAX_LINES_PER_FILE = 5
 # ── Reference display ───────────────────────────────────────────────────
 
 
+def _file_path_key(ref):
+    return ref.file_path
+
+
 def _group_by_file(refs, key=None):
     """Group references by file path, preserving order."""
     if key is None:
-        key = lambda r: r.file_path
+        key = _file_path_key
     grouped: dict[str, list] = {}
     for ref in refs:
         grouped.setdefault(key(ref), []).append(ref)
@@ -27,7 +31,8 @@ def _group_by_file(refs, key=None):
 
 
 def _format_version_tag(
-    ref: ConfigReference, compromised: frozenset[str],
+    ref: ConfigReference,
+    compromised: frozenset[str],
 ) -> str:
     """Format a version annotation for a config reference."""
     if ref.pinned_version and ref.pinned_version in compromised:
@@ -38,19 +43,17 @@ def _format_version_tag(
 
 
 def print_source_refs(
-    refs: list[SourceReference], package: str,
+    refs: list[SourceReference],
+    package: str,
 ) -> None:
     """Print grouped source file references."""
     if not refs:
-        print(
-            f"  {GREEN}+ No {package} imports found in source files{RESET}\n"
-        )
+        print(f"  {GREEN}+ No {package} imports found in source files{RESET}\n")
         return
 
     by_file = _group_by_file(refs)
     print(
-        f"  {BOLD}Source files referencing {package} "
-        f"({len(by_file)} files):{RESET}\n"
+        f"  {BOLD}Source files referencing {package} ({len(by_file)} files):{RESET}\n"
     )
 
     for file_path, file_refs in sorted(by_file.items()):
@@ -97,35 +100,26 @@ def _print_stats(results: ScanResults, threat: ThreatProfile) -> None:
     """Print scan statistics."""
     pkg = threat.package
     print(f"  Environments scanned:         {BOLD}{results.envs_scanned}{RESET}")
-    print(
-        f"  {pkg} installations found:  "
-        f"{BOLD}{len(results.installations)}{RESET}"
-    )
+    print(f"  {pkg} installations found:  {BOLD}{len(results.installations)}{RESET}")
 
     compromised = results.compromised_installations
     if compromised:
-        print(
-            f"  {RED}{BOLD}Compromised versions found:     "
-            f"{len(compromised)}{RESET}"
-        )
+        print(f"  {RED}{BOLD}Compromised versions found:     {len(compromised)}{RESET}")
     else:
         print(f"  Compromised versions found:    {GREEN}0{RESET}")
 
     if results.iocs:
         print(
-            f"  {RED}{BOLD}IOC artifacts found:            "
-            f"{len(results.iocs)}{RESET}"
+            f"  {RED}{BOLD}IOC artifacts found:            {len(results.iocs)}{RESET}"
         )
     else:
         print(f"  IOC artifacts found:           {GREEN}0{RESET}")
 
     print(
-        f"  Source files using {pkg}:    "
-        f"{BOLD}{len(results.source_files)}{RESET} files"
+        f"  Source files using {pkg}:    {BOLD}{len(results.source_files)}{RESET} files"
     )
     print(
-        f"  Config files with {pkg}:     "
-        f"{BOLD}{len(results.config_files)}{RESET} files"
+        f"  Config files with {pkg}:     {BOLD}{len(results.config_files)}{RESET} files"
     )
 
     compromised_configs = results.compromised_configs
@@ -140,7 +134,8 @@ def _print_stats(results: ScanResults, threat: ThreatProfile) -> None:
 
 
 def _print_remediation(
-    results: ScanResults, threat: ThreatProfile,
+    results: ScanResults,
+    threat: ThreatProfile,
 ) -> None:
     """Print remediation steps for a compromised system."""
     remediation = threat.remediation
@@ -150,14 +145,10 @@ def _print_remediation(
     step = 1
     if remediation.rotate_secrets:
         print(
-            f"  {step}. {BOLD}Assume ALL secrets on this machine "
-            f"are compromised{RESET}"
+            f"  {step}. {BOLD}Assume ALL secrets on this machine are compromised{RESET}"
         )
-        print(
-            f"     -> Rotate SSH keys, cloud credentials (AWS/GCP/Azure), "
-            f"API keys"
-        )
-        print(f"     -> Revoke and regenerate .env files and tokens")
+        print("     -> Rotate SSH keys, cloud credentials (AWS/GCP/Azure), API keys")
+        print("     -> Revoke and regenerate .env files and tokens")
         print()
         step += 1
 
@@ -172,7 +163,7 @@ def _print_remediation(
     if remediation.install_command:
         print(f"  {step}. {BOLD}Fix {threat.package}:{RESET}")
         print(f"     -> {remediation.install_command}")
-        print(f"     -> Or upgrade past compromised range once verified")
+        print("     -> Or upgrade past compromised range once verified")
         print()
         step += 1
 
@@ -197,7 +188,8 @@ def _print_remediation(
 
 
 def _print_clean_verdict(
-    results: ScanResults, threat: ThreatProfile,
+    results: ScanResults,
+    threat: ThreatProfile,
 ) -> None:
     """Print the all-clear verdict with optional warnings."""
     print()
@@ -220,7 +212,8 @@ def _print_clean_verdict(
 
 
 def print_threat_report(
-    results: ScanResults, threat: ThreatProfile,
+    results: ScanResults,
+    threat: ThreatProfile,
 ) -> None:
     """Print the scan report for a single threat."""
     print(
