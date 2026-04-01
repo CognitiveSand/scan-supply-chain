@@ -30,6 +30,15 @@ class WalkFileIOC:
     sha256: list[str] = field(default_factory=list)
 
 
+def _for_current_platform(*, linux, darwin, windows):
+    """Select the value matching the current OS."""
+    if sys.platform == "win32":
+        return windows
+    if sys.platform == "darwin":
+        return darwin
+    return linux
+
+
 @dataclass(frozen=True)
 class KnownPathIOC:
     """IOC files at known absolute paths, per platform."""
@@ -41,11 +50,9 @@ class KnownPathIOC:
 
     def paths_for_platform(self) -> list[str]:
         """Return paths for the current OS."""
-        if sys.platform == "win32":
-            return self.windows
-        if sys.platform == "darwin":
-            return self.darwin
-        return self.linux
+        return _for_current_platform(
+            linux=self.linux, darwin=self.darwin, windows=self.windows
+        )
 
 
 @dataclass(frozen=True)
@@ -68,18 +75,18 @@ class RemediationInfo:
     check_persistence: dict[str, list[str]] = field(default_factory=dict)
 
     def artifact_lines_for_platform(self) -> list[str]:
-        if sys.platform == "win32":
-            return self.remove_artifacts.get("windows", [])
-        if sys.platform == "darwin":
-            return self.remove_artifacts.get("darwin", [])
-        return self.remove_artifacts.get("linux", [])
+        return _for_current_platform(
+            linux=self.remove_artifacts.get("linux", []),
+            darwin=self.remove_artifacts.get("darwin", []),
+            windows=self.remove_artifacts.get("windows", []),
+        )
 
     def persistence_steps_for_platform(self) -> list[str]:
-        if sys.platform == "win32":
-            return self.check_persistence.get("windows", [])
-        if sys.platform == "darwin":
-            return self.check_persistence.get("darwin", [])
-        return self.check_persistence.get("linux", [])
+        return _for_current_platform(
+            linux=self.check_persistence.get("linux", []),
+            darwin=self.check_persistence.get("darwin", []),
+            windows=self.check_persistence.get("windows", []),
+        )
 
 
 # ── Main profile ───────────────────────────────────────────────────────
