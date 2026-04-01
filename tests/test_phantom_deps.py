@@ -117,8 +117,8 @@ class TestPackageLockJsonParsing:
 
 
 class TestYarnLockParsing:
-    def test_finds_phantom_at_line_start(self, tmp_path):
-        # @req FR-17
+    def test_finds_phantom_with_version(self, tmp_path):
+        # @req FR-17 FR-34
         lockfile = tmp_path / "yarn.lock"
         lockfile.write_text(
             'plain-crypto-js@^4.2.1:\n  version "4.2.1"\n  resolved "..."\n'
@@ -127,7 +127,7 @@ class TestYarnLockParsing:
         found = _check_yarn_lock(lockfile, ["plain-crypto-js"], set())
 
         assert len(found) == 1
-        assert "plain-crypto-js" in found[0]
+        assert "plain-crypto-js@4.2.1" in found[0]
 
     def test_ignores_substring_in_middle_of_line(self, tmp_path):
         # @req FR-17
@@ -138,14 +138,25 @@ class TestYarnLockParsing:
 
         assert found == []
 
-    def test_finds_phantom_at_file_start(self, tmp_path):
-        # @req FR-17
+    def test_finds_phantom_at_file_start_with_version(self, tmp_path):
+        # @req FR-17 FR-34
         lockfile = tmp_path / "yarn.lock"
         lockfile.write_text('plain-crypto-js@^4.2.1:\n  version "4.2.1"\n')
 
         found = _check_yarn_lock(lockfile, ["plain-crypto-js"], set())
 
         assert len(found) == 1
+        assert "plain-crypto-js@4.2.1" in found[0]
+
+    def test_falls_back_when_no_version_line(self, tmp_path):
+        # @req FR-34
+        lockfile = tmp_path / "yarn.lock"
+        lockfile.write_text('plain-crypto-js@^4.2.1:\n  resolved "..."\n')
+
+        found = _check_yarn_lock(lockfile, ["plain-crypto-js"], set())
+
+        assert len(found) == 1
+        assert "plain-crypto-js@?" in found[0]
 
     def test_handles_missing_file(self, tmp_path):
         # @req FR-17 NFR-03
@@ -160,8 +171,8 @@ class TestYarnLockParsing:
 
 
 class TestPnpmLockParsing:
-    def test_finds_phantom_in_v6_format(self, tmp_path):
-        # @req FR-17
+    def test_finds_phantom_in_v6_with_version(self, tmp_path):
+        # @req FR-17 FR-34
         lockfile = tmp_path / "pnpm-lock.yaml"
         lockfile.write_text(
             "lockfileVersion: '6.0'\n"
@@ -174,10 +185,10 @@ class TestPnpmLockParsing:
         found = _check_pnpm_lock(lockfile, ["plain-crypto-js"], set())
 
         assert len(found) == 1
-        assert "plain-crypto-js" in found[0]
+        assert "plain-crypto-js@4.2.1" in found[0]
 
-    def test_finds_phantom_in_v9_format(self, tmp_path):
-        # @req FR-17
+    def test_finds_phantom_in_v9_with_version(self, tmp_path):
+        # @req FR-17 FR-34
         lockfile = tmp_path / "pnpm-lock.yaml"
         lockfile.write_text(
             "lockfileVersion: '9.0'\n"
@@ -189,7 +200,7 @@ class TestPnpmLockParsing:
         found = _check_pnpm_lock(lockfile, ["plain-crypto-js"], set())
 
         assert len(found) == 1
-        assert "plain-crypto-js" in found[0]
+        assert "plain-crypto-js@4.2.1" in found[0]
 
     def test_ignores_packages_not_in_names_list(self, tmp_path):
         # @req FR-17

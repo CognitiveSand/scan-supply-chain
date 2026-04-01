@@ -243,13 +243,29 @@ def _check_yarn_lock(
     except (PermissionError, OSError):
         return found
 
+    version_re = re.compile(r'^\s+version\s+"([^"]+)"', re.MULTILINE)
+
     for name in names:
         # Match "name@" at start of line (yarn.lock entry header)
-        if f"\n{name}@" in text or text.startswith(f"{name}@"):
-            key = f"{lock_path}:{name}"
-            if key not in seen:
-                seen.add(key)
-                found.append(f"phantom:{name} in {lock_path}")
+        marker = f"\n{name}@"
+        pos = text.find(marker)
+        if pos == -1 and text.startswith(f"{name}@"):
+            pos = 0
+        if pos == -1:
+            continue
+
+        key = f"{lock_path}:{name}"
+        if key in seen:
+            continue
+        seen.add(key)
+
+        # Extract version from the line after the entry header
+        version = "?"
+        after_header = text[pos + 1 :] if pos > 0 else text
+        match = version_re.search(after_header)
+        if match:
+            version = match.group(1)
+        found.append(f"phantom:{name}@{version} in {lock_path}")
 
     return found
 
@@ -275,13 +291,15 @@ def _check_pnpm_lock(
 
     for name in names:
         escaped = re.escape(name)
-        # Match packages/snapshots keys: /name@version: (v6) or name@version: (v9)
-        # Keys may be indented with whitespace in the YAML
-        pattern = re.compile(rf"^\s*/?{escaped}@", re.MULTILINE)
-        if pattern.search(text):
+        # Match packages/snapshots keys and capture version:
+        #   v6: /name@4.2.1:    v9: name@4.2.1:
+        pattern = re.compile(rf"^\s*/?{escaped}@([^\s:(]+)", re.MULTILINE)
+        match = pattern.search(text)
+        if match:
             key = f"{lock_path}:{name}"
             if key not in seen:
                 seen.add(key)
-                found.append(f"phantom:{name} in {lock_path}")
+                version = match.group(1)
+                found.append(f"phantom:{name}@{version} in {lock_path}")
 
     return found
