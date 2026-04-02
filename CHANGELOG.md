@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.2 — 2026-04-02
+
+### Changed
+- **README overhaul** — Refined existing sections for clarity. Added detailed "How It Works" section explaining each pipeline phase, sub-scanner, and design rationale for security engineers and contributors.
+
 ## 0.8.1 — 2026-04-02
 
 ### Changed

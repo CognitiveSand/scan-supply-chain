@@ -9,7 +9,7 @@ A data-driven scanner that detects indicators of compromise (IOCs) from known **
 | `litellm-2026-03` | litellm | PyPI | 1.82.7, 1.82.8 | 2026-03-24 |
 | `axios-2026-03` | axios | npm | 1.14.1, 0.30.4 | 2026-03-31 |
 
-> **No guarantees.** This tool attempts to find known artifacts associated with supply chain compromises. It does **not** guarantee detection of all malicious activity, nor does it guarantee that a clean scan means your system was not affected. A determined attacker may have removed traces, and the tool cannot detect secrets that have already been exfiltrated. Use this scanner as one input in your incident response — not as a definitive verdict.
+> **No guarantees.** This tool searches for known artifacts of specific supply chain compromises. It does **not** guarantee detection of all malicious activity, nor does a clean scan prove your system was unaffected. Attackers may have removed traces, and the tool cannot detect secrets that have already been exfiltrated. Use this scanner as one input in your incident response — not as a definitive verdict.
 
 ## Quick Start
 
@@ -202,35 +202,15 @@ Available for ~3 hours. C2 at `sfrclak.com:8000`.
 
 ## What This Scanner Detects
 
-The scanner runs a 5-phase pipeline for each threat profile:
+The scanner runs a **5-phase pipeline** for each threat profile. Every phase is described in detail in the [How It Works](#how-it-works) section at the end of this document. In short:
 
-| Phase | What It Looks For |
-|-------|-------------------|
-| 1 | Package metadata directories across the filesystem (PyPI: `dist-info`/`egg-info`; npm: `node_modules/*/package.json`) |
-| 2 | Package version from metadata — flags compromised versions |
-| 3 | IOC artifacts, persistence, caches, history (see below) |
-| 4 | Source files and dependency configs referencing the package, flagging pinned compromised versions |
-| 5 | Per-threat summary with confidence tier and remediation guidance |
-
-### Phase 3: Evidence Collection
-
-Phase 3 runs multiple sub-scanners to build a comprehensive evidence picture:
-
-| Sub-scanner | What It Checks |
-|-------------|----------------|
-| **IOC file walk** | Backdoor files (e.g., `litellm_init.pth`) by name and optional SHA-256 hash |
-| **Known paths** | Platform-specific IOC paths from threat profile (`~/.config/sysmon/`, `%APPDATA%\sysmon\`, etc.) |
-| **C2 connections** | Active TCP connections matched against C2 infrastructure with structured `ss`/`lsof`/`netstat` parsing — reports process name, PID, and executable path |
-| **Kubernetes pods** | Suspicious pods (e.g., `node-setup-*`) in specified namespace |
-| **Phantom dependencies** | Packages that should not exist (e.g., `plain-crypto-js`). Structural JSON parsing for `package-lock.json`, line-anchored matching for `yarn.lock` and `pnpm-lock.yaml` with version extraction |
-| **Windows checks** | Registry Run keys and Scheduled Tasks for persistence keywords |
-| **Persistence scan** | Generic persistence locations: crontab, shell rc files (`.bashrc`, `.zshrc`), systemd user services, XDG autostart, `/tmp` scripts, macOS LaunchAgents |
-| **Cache scan** | Package manager caches: pip (`~/.cache/pip`), npm (`~/.npm/_cacache`), pnpm store — ecosystem-gated |
-| **History scan** | Shell history (`.bash_history`, `.zsh_history`) for `pip install`/`npm install`/`yarn add`/`pnpm add` commands mentioning the package |
-
-### Phase 4: Smart Source Detection
-
-For Python files, the scanner uses `ast.parse()` to detect real imports and attribute access (`import litellm`, `from litellm import X`, `litellm.completion()`). This eliminates false positives from string literals, regex patterns, and comments that merely mention the package name. On `SyntaxError`, it falls back to regex matching. Non-Python source files (`.js`, `.ts`) use regex.
+| Phase | Purpose |
+|-------|---------|
+| 1 — Discovery | Find every installation of the package across the filesystem |
+| 2 — Version check | Read metadata to identify compromised versions |
+| 3 — Evidence collection | Search for IOC artifacts, C2 connections, persistence, caches, and install history |
+| 4 — Source & config scan | Find source files that import the package and dependency configs that pin it |
+| 5 — Verdict & remediation | Compute a confidence tier and print actionable next steps |
 
 ### Evidence Scoring
 
@@ -242,8 +222,6 @@ Instead of a binary clean/compromised verdict, findings are scored into four con
 | **HIGH** | Strong compromise indicators | Compromised version + IOC file or phantom dependency |
 | **MEDIUM** | Likely compromised | Compromised version alone, or persistence artifact |
 | **LOW** | Circumstantial evidence | Source reference, cache trace, or install history only |
-
-The confidence tier is displayed in the scan report alongside the existing per-finding detail.
 
 ## Limitations
 
@@ -319,7 +297,7 @@ scan_supply_chain/
   ecosystem_pypi.py      PyPI: dist-info, METADATA, Python patterns
   ecosystem_npm.py       npm: node_modules, package.json, JS/TS patterns
   scanner.py             Orchestrator (multi-threat CLI)
-  config.py              Generic constants (skip dirs)
+  config.py              Generic constants (skip dirs, file helpers)
   models.py              Data structures + Confidence/Finding enums
   scoring.py             Evidence scoring (findings → confidence tier)
   formatting.py          Terminal output (ANSI with Windows support)
@@ -337,13 +315,212 @@ scan_supply_chain/
   cache_scanner.py       pip/npm/pnpm cache scanning
   history_scanner.py     Shell history for install commands
   ast_scanner.py         AST-based Python import detection
+  subprocess_utils.py    Safe subprocess execution helper
   source_scanner.py      Phase 4 — source/config file scanning
   report.py              Phase 5 — summary with confidence tiers
-tests/                   pytest test suite (348 tests)
+tests/                   pytest test suite (355 tests)
 run_scan.py              Direct entry point
 run_scan.bat             Double-click launcher for Windows
 ```
 
+---
+
+## How It Works
+
+This section explains what the scanner does at each step, why it does it, and what the design tradeoffs are. It is intended for security engineers evaluating the tool, contributors, and anyone who wants to understand what is happening on their machine when they run it.
+
+### Overview
+
+The scanner is organized around two abstractions:
+
+- **Threat profiles** — TOML files that describe a specific supply chain attack: which package, which versions are compromised, what C2 infrastructure the attacker used, what IOC files the payload drops, and what remediation steps to take. The scanner ships two built-in profiles (LiteLLM, Axios) and supports user-defined profiles.
+- **Ecosystem plugins** — Python classes that know how each package manager stores metadata on disk. The PyPI plugin knows about `dist-info`/`egg-info` directories and `METADATA` files. The npm plugin knows about `node_modules/*/package.json`. Each plugin also provides the regex patterns for detecting imports and dependencies in source and config files.
+
+For each threat profile, the scanner runs a 5-phase pipeline. Each phase feeds data into a shared `ScanResults` object that accumulates installations, IOCs, source references, config references, and typed findings. At the end, the results are scored and a verdict is printed.
+
+### Before the pipeline: search root computation
+
+Before any scanning begins, the scanner builds a **deduplicated list of filesystem roots** to walk. This happens once per ecosystem and the same roots are shared by all phases.
+
+The roots come from:
+
+1. **Platform policy** — the OS-specific set of top-level directories where packages might be installed. On Linux: `/home`, `/opt`, `/usr`, `/srv`, `/var`. On macOS: `/Users`, `/opt/homebrew`, `/usr/local`, `/Library`. On Windows: `%USERPROFILE%`, `%APPDATA%`, `Program Files`, etc.
+2. **Conda/pipx/nvm directories** — well-known locations under `$HOME` where isolated environments live (`~/miniconda3`, `~/.local/share/pipx`, `~/.nvm`, etc.), added if they exist.
+3. **Ecosystem extras** — the npm plugin adds the global `node_modules` directory (found via `npm root -g`); the PyPI plugin adds nothing extra.
+4. **`$HOME` itself** — always included so that source/config scans cover user project directories.
+
+After collecting all candidates, the list is **deduplicated by containment**: if `/home` is a root, `/home/me` is dropped because it would be walked anyway. This prevents double-scanning.
+
+**Why it works this way:** Supply chain compromises install packages into virtual environments, conda envs, nvm prefixes, and global site-packages. No single directory covers all cases. Walking a broad set of roots is the only way to catch installations in unusual locations (e.g., a CI runner's custom venv under `/srv`). The deduplication keeps this practical.
+
+### Phase 1: Discovery
+
+**Goal:** Find every installation of the target package on the filesystem.
+
+The scanner walks every search root using `os.walk()` with **directory pruning** — it skips `__pycache__`, `.git`, `.tox`, `dist`, `build`, and other directories that never contain package metadata. For each directory name encountered:
+
+- **PyPI:** checks if the directory name matches the pattern `{package}-*.dist-info` or `{package}-*.egg-info` (case-insensitive, with `-` and `_` treated as equivalent, per PEP 503 normalization).
+- **npm:** checks if the current directory is `node_modules`, and if so, looks for a `{package}/package.json` subdirectory.
+
+Each match is recorded as a metadata directory path. Duplicates that resolve to the same real path (via symlinks) are removed.
+
+**Why it works this way:** Package managers don't maintain a centralized registry of what's installed where. The only reliable way to find all installations is to walk the filesystem. The pruning keeps it fast — skipping `__pycache__` and `.git` alone eliminates a huge fraction of the directory tree. The pattern matching is intentionally loose (case-insensitive, dash/underscore equivalence) because package managers normalize names inconsistently.
+
+### Phase 2: Version check
+
+**Goal:** Determine the installed version of each discovered installation and flag compromised versions.
+
+For each metadata directory found in Phase 1:
+
+- **PyPI:** reads the `METADATA` file (or `PKG-INFO` for egg-info) and extracts the `Version:` header.
+- **npm:** reads `package.json` and extracts the `"version"` field.
+
+Each installation is recorded with its path and version. If the version matches one of the compromised versions listed in the threat profile, it is flagged. The output shows `! COMPROMISED` or `+ clean` for each installation.
+
+**Why it works this way:** The version check is the single highest-signal indicator. If you have `litellm==1.82.7` installed, you were almost certainly affected. Everything else the scanner does is gathering supporting evidence — this is the core question.
+
+### Phase 3: Evidence collection
+
+**Goal:** Search for artifacts, network activity, and persistence mechanisms that indicate active or past compromise.
+
+Phase 3 runs multiple independent sub-scanners. Each one appends its findings to the shared `ScanResults`. They run in order but are logically independent.
+
+#### IOC file walk
+
+Walks all search roots looking for specific filenames defined in the threat profile. For example, the LiteLLM profile searches for `litellm_init.pth` — the auto-executing backdoor file that v1.82.8 dropped into `site-packages/`. When SHA-256 hashes are provided in the profile, found files are verified against them — a file named `litellm_init.pth` with a different hash is not flagged (it might be a legitimate file in a different project). When the file can't be read (permission denied), it is still reported as suspicious.
+
+**Why:** IOC files are the most direct evidence of a payload being dropped. The hash check reduces false positives. The walk covers all search roots because the attacker's payload may end up in any Python environment on the machine.
+
+#### Known path check
+
+Checks a list of absolute paths from the threat profile. These are paths where the specific attack is known to drop files — for example, `~/.config/sysmon/sysmon.py` (the LiteLLM persistent backdoor) or `%APPDATA%\sysmon\sysmon.py` (Windows equivalent). Paths are platform-specific and are expanded (`~` and `%VAR%`) at runtime.
+
+**Why:** Unlike the IOC file walk (which searches by filename), this check looks at exact locations. Some payloads drop files with generic names in specific directories — you can't walk the whole filesystem looking for "sysmon.py", but you can check the three places the attacker is known to put it.
+
+#### C2 connection check
+
+Checks active TCP connections for communication with known attacker infrastructure.
+
+1. Selects the right network tool for the OS: `ss -tnp` on Linux, `lsof -i -P -n` on macOS, `netstat -ano` on Windows.
+2. Runs the command and **parses the output into structured records** (`ConnectionRecord` objects with `peer_ip`, `peer_port`, `pid`, and `process_name`). The parser understands the output format of `ss` and `lsof`.
+3. Matches each connection against the C2 IP addresses from the threat profile. If the threat profile specifies ports (e.g., Axios uses port 8000), only connections to those ports are flagged. If no ports are specified (e.g., LiteLLM), any connection to a C2 IP is flagged.
+4. On Linux, enriches matched connections with the executable path by reading `/proc/{pid}/exe`.
+
+If `--resolve-c2` is enabled, the scanner also performs live DNS lookups on the C2 domains and adds any resolved IPs to the match set. This is disabled by default because the DNS queries are visible to the attacker's infrastructure.
+
+**Why structured parsing instead of substring matching:** The original approach checked if a C2 IP appeared anywhere in the `ss` output as a substring. This would incorrectly match `21.2.3.45` when looking for `1.2.3.4`. Structured parsing extracts actual IP:port pairs and matches them precisely. The PID and process name are included in the output so the operator can immediately identify which process is talking to the attacker.
+
+#### Kubernetes pod check
+
+If `kubectl` is available and the threat profile defines suspicious pod patterns, queries the specified namespace for pods whose names start with those patterns. The LiteLLM attack deploys privileged `node-setup-*` pods in `kube-system` for lateral movement.
+
+**Why:** This only runs when `kubectl` is present and the threat profile requests it. Most users won't have `kubectl` configured, and the check is skipped silently.
+
+#### Phantom dependency check
+
+Checks for packages that should never exist in your dependency tree. These are malicious dependencies injected by the compromised package — for example, Axios v1.14.1 added `plain-crypto-js` as a dependency.
+
+- **npm:** parses `package-lock.json` structurally (JSON), and uses line-anchored regex for `yarn.lock` and `pnpm-lock.yaml`. Extracts the resolved version when possible (e.g., `phantom:plain-crypto-js@4.2.1`).
+- **PyPI:** walks `dist-info` directories looking for metadata referencing the phantom package name.
+
+**Why:** Phantom dependencies are strong evidence of compromise — they only exist because the malicious version pulled them in. Even after you upgrade the parent package, the phantom dependency may still be installed. The lockfile check catches cases where the phantom dependency is recorded in version control even after the package itself was removed.
+
+#### Windows-specific checks
+
+On Windows, queries the Registry Run keys (`HKCU\...\Run`, `HKLM\...\Run`) and Scheduled Tasks for persistence keywords defined in the threat profile. For example, the LiteLLM profile searches for "sysmon", "litellm", and "system telemetry" in registry entries and scheduled task names.
+
+**Why:** These are the standard Windows persistence mechanisms. The check is keyword-based because the attacker may use slightly different paths or task names across variants.
+
+#### Persistence scan
+
+Checks generic persistence locations that any supply chain attack might abuse, filtering by the target package name:
+
+- **Crontab:** runs `crontab -l` and searches for lines mentioning the package name (ignoring comments).
+- **Shell rc files:** reads `.bashrc`, `.zshrc`, `.profile`, `.bash_profile` looking for the package name in non-comment lines. Reports the specific line number.
+- **`/tmp` scripts:** lists `.py`, `.sh`, and `.bash` files in `/tmp`. For Python files, uses the AST scanner to check if the file actually imports the target package (not just mentions it in a string). For shell scripts, checks non-comment lines.
+- **systemd user services** (Linux): reads `~/.config/systemd/user/*.service` files for the package name.
+- **XDG autostart** (Linux): reads `~/.config/autostart/*.desktop` files for the package name.
+- **LaunchAgents** (macOS): reads `~/Library/LaunchAgents/*.plist` files for the package name.
+
+**Why:** Supply chain attacks commonly install persistence mechanisms to survive package upgrades. The crontab check catches the LiteLLM backdoor's 50-minute polling timer. The `/tmp` check catches dropped scripts. Every check filters by the package name to avoid drowning the operator in noise from unrelated crontab entries or shell configuration.
+
+#### Cache scan
+
+Checks package manager caches for traces of the compromised package. The scan is ecosystem-gated — PyPI threats only check the pip cache, npm threats check npm and pnpm caches.
+
+- **pip cache:** walks `~/.cache/pip` (Linux), `~/Library/Caches/pip` (macOS), or `%LOCALAPPDATA%\pip\Cache` (Windows) looking for files or directories with the package name in their name.
+- **npm cache:** walks `~/.npm/_cacache` looking for files with the package name.
+- **pnpm store:** walks `~/.local/share/pnpm/store` looking for directories with the package name.
+
+One hit per cache is enough — the scanner stops after the first match.
+
+**Why:** Even after uninstalling a compromised package, traces remain in the package manager's cache. Finding `litellm-1.82.7.whl` in the pip cache confirms the compromised version was downloaded on this machine. This is LOW confidence evidence on its own but contributes to the overall picture.
+
+#### History scan
+
+Searches `.bash_history` and `.zsh_history` for install commands (`pip install`, `npm install`, `yarn add`, `pnpm add`, etc.) that mention the target package. The command patterns are ecosystem-gated.
+
+**Why:** Shell history is another trace that survives package removal. Finding `pip install litellm==1.82.7` in your history confirms you installed the compromised version, even if it's been uninstalled since.
+
+### Phase 4: Source and config scan
+
+**Goal:** Find every source file that uses the package and every dependency config that references it. Flag configs that pin a compromised version.
+
+The scanner walks all search roots, skipping `site-packages` and `node_modules` (third-party code is not interesting — you want to know about *your* code). For each file:
+
+1. **Classification:** the file is categorized as a source file (`.py`, `.js`, `.ts`, etc.) or a config file (`requirements.txt`, `pyproject.toml`, `package.json`, etc.) based on the ecosystem plugin's patterns.
+2. **Fast-path filter:** the entire file is read, and if the package name doesn't appear anywhere in the text, the file is skipped immediately. This eliminates the vast majority of files without line-by-line scanning.
+3. **Source file scanning:**
+   - For **Python files**, the scanner uses `ast.parse()` to build an Abstract Syntax Tree and walks it looking for `import litellm`, `from litellm import X`, `from litellm.utils import Y`, and `litellm.completion()` attribute access. This produces zero false positives from string literals (`"litellm"` in a comment or docstring) and regex patterns (`re.compile(r"litellm\.")`) that merely mention the name. If the file has a syntax error and can't be parsed, the scanner falls back to regex matching.
+   - For **JavaScript/TypeScript files**, the scanner uses regex patterns for `require('package')` and `import ... from 'package'`.
+4. **Config file scanning:** checks for dependency declarations using ecosystem-specific regex. If a pinned version is found (e.g., `litellm==1.82.7` in `requirements.txt`), extracts the version and flags it if compromised.
+
+The scanner excludes its own source directory to avoid reporting on itself.
+
+**Why AST-based detection:** This scanner is designed to scan systems that *use* the target package legitimately. A machine running LiteLLM in production will have many `.py` files that mention "litellm" in strings, comments, and variable names. Without AST parsing, these would all be false positives. The AST approach means the scanner only reports files that actually `import` or call the package.
+
+### Phase 5: Verdict and remediation
+
+**Goal:** Produce a summary and actionable guidance.
+
+The scanner computes a **confidence tier** from all collected findings:
+
+1. Extracts the set of finding categories present (version match, IOC file, C2 connection, persistence, cache trace, etc.).
+2. Applies precedence rules:
+   - Compromised version + active C2 connection = **CRITICAL**
+   - Compromised version + IOC file or phantom dependency = **HIGH**
+   - Compromised version alone, or persistence artifact = **MEDIUM**
+   - Anything else (source ref, cache trace, history) = **LOW**
+   - No findings at all = no confidence tier displayed.
+3. Prints statistics: environments scanned, installations found, compromised versions, IOC artifacts, source files, config files, and the confidence tier.
+
+If compromise is detected (`is_clean` is false — meaning compromised installations, IOC artifacts, or compromised config pins were found), the scanner prints **threat-specific remediation steps** from the TOML profile:
+
+1. Credential rotation warning (if `rotate_secrets = true` in the profile).
+2. Artifact removal instructions (platform-specific paths).
+3. Safe version install command.
+4. Config file update guidance (specific files and line numbers where compromised versions are pinned).
+5. Persistence check commands (platform-specific).
+6. Link to the advisory.
+
+If no compromise is detected but source/config references were found, a warning is printed advising the user to verify their version is safe.
+
+**Why a tiered verdict instead of binary:** A machine that has `litellm==1.82.7` installed AND is actively connecting to the C2 server is in a fundamentally different situation from a machine where someone once ran `pip install litellm` and it appeared in their shell history. The tiers help the operator prioritize their response.
+
+### Design rationale: broad filesystem walk
+
+The scanner deliberately walks large portions of the filesystem. This is slow on machines with large disks and many files. It is also the only reliable approach for an incident response tool that needs to find *every* installation, not just the one in the current virtualenv. Package managers install into conda envs, pipx venvs, nvm prefixes, system site-packages, and project-local `.venv` directories. A compromised package in a forgotten virtualenv is still a compromised package.
+
+The fast-path filter (checking if the package name appears in the file content before line-by-line scanning) and directory pruning (skipping `.git`, `__pycache__`, etc.) keep the cost manageable. On a typical developer machine, the full scan takes a few seconds.
+
+### Design rationale: data-driven threat profiles
+
+The scanner doesn't hardcode any package names, versions, file paths, or C2 addresses. Everything attack-specific lives in the TOML threat profile. This means:
+
+- **New threats can be added without code changes.** Drop a TOML file and the scanner picks it up.
+- **Users can define their own threats.** If your organization discovers an internal compromise, write a TOML file describing it and the scanner works immediately.
+- **The scanner code is purely mechanical.** It walks, reads, parses, matches, and reports. The intelligence is in the profiles.
+
 ## Disclaimer
 
-This tool is provided as-is, with no warranty of any kind. It **attempts to find** known indicators of supply chain compromises but **cannot guarantee** complete detection. A clean scan does not mean your system was unaffected. Always perform credential rotation if there is any possibility that a compromised package was installed in your environment, even briefly.
+This tool is provided as-is, with no warranty of any kind. It searches for known indicators of supply chain compromises but **cannot guarantee** complete detection. A clean scan does not mean your system was unaffected. Always perform credential rotation if there is any possibility that a compromised package was installed in your environment, even briefly.
