@@ -43,21 +43,25 @@ BOLD = _code("\033[1m")
 RESET = _code("\033[0m")
 
 
+_SEPARATOR_WIDTH = 63
+
+
 def print_banner(version: str = ""):
     ver_str = f"v{version}" if version else ""
     title = f"Supply Chain Compromise Scanner {ver_str}".strip()
-    # Pad title to fill the box (59 chars inner width)
-    padded = f"   {title}" + " " * (60 - len(title) - 3)
+    # Pad title to fill the box (inner width = _SEPARATOR_WIDTH - 3)
+    inner = _SEPARATOR_WIDTH - 3
+    padded = f"   {title}" + " " * (inner - len(title))
     print(f"{CYAN}{BOLD}")
-    print("+" + "=" * 63 + "+")
+    print("+" + "=" * _SEPARATOR_WIDTH + "+")
     print(f"|{padded}|")
     print("|   Detects known PyPI and npm supply chain attacks            |")
-    print("+" + "=" * 63 + "+")
+    print("+" + "=" * _SEPARATOR_WIDTH + "+")
     print(RESET)
 
 
 def print_separator():
-    print(f"{CYAN}{'-' * 63}{RESET}")
+    print(f"{CYAN}{'-' * _SEPARATOR_WIDTH}{RESET}")
 
 
 def print_phase_header(number: int, title: str):

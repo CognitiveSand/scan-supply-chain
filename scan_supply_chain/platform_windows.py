@@ -4,8 +4,10 @@ import os
 import shutil
 from pathlib import Path
 
+from .platform_policy import BasePlatformPolicy, _first_existing_dir
 
-class WindowsPolicy:
+
+class WindowsPolicy(BasePlatformPolicy):
     """Windows-specific paths and commands."""
 
     @property
@@ -56,8 +58,6 @@ class WindowsPolicy:
 
     def home_pipx_dir(self) -> Path | None:
         localappdata = os.environ.get("LOCALAPPDATA", "")
-        if localappdata:
-            candidate = Path(localappdata) / "pipx" / "venvs"
-            if candidate.is_dir():
-                return candidate
-        return None
+        if not localappdata:
+            return None
+        return _first_existing_dir(Path(localappdata) / "pipx" / "venvs")

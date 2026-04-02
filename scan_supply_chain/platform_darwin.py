@@ -2,8 +2,10 @@
 
 from pathlib import Path
 
+from .platform_policy import BasePlatformPolicy, _first_existing_dir
 
-class DarwinPolicy:
+
+class DarwinPolicy(BasePlatformPolicy):
     """macOS-specific paths and commands."""
 
     @property
@@ -34,14 +36,8 @@ class DarwinPolicy:
     def exclusion_note(self) -> str:
         return "Scanning user-accessible paths (/Users, /opt/homebrew, /Library)."
 
-    def home_conda_dirs(self) -> list[str]:
-        return ["miniconda3", "miniforge3", "anaconda3", ".conda"]
-
     def home_pipx_dir(self) -> Path | None:
-        xdg = Path.home() / ".local" / "share" / "pipx"
-        if xdg.is_dir():
-            return xdg
-        native = Path.home() / "Library" / "Application Support" / "pipx" / "venvs"
-        if native.is_dir():
-            return native
-        return None
+        return _first_existing_dir(
+            Path.home() / ".local" / "share" / "pipx",
+            Path.home() / "Library" / "Application Support" / "pipx" / "venvs",
+        )

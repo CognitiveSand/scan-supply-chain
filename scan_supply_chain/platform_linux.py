@@ -1,9 +1,9 @@
 """Linux platform policy — OS infrastructure only."""
 
-from pathlib import Path
+from .platform_policy import BasePlatformPolicy
 
 
-class LinuxPolicy:
+class LinuxPolicy(BasePlatformPolicy):
     """Linux-specific paths and commands."""
 
     @property
@@ -29,10 +29,3 @@ class LinuxPolicy:
     @property
     def exclusion_note(self) -> str:
         return "/root is excluded -- this scanner only inspects user-accessible paths."
-
-    def home_conda_dirs(self) -> list[str]:
-        return ["miniconda3", "miniforge3", "anaconda3", ".conda"]
-
-    def home_pipx_dir(self) -> Path | None:
-        candidate = Path.home() / ".local" / "share" / "pipx"
-        return candidate if candidate.is_dir() else None

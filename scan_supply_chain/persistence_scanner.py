@@ -9,20 +9,20 @@ from __future__ import annotations
 
 import logging
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
-from .formatting import print_check_header
-from .models import FindingCategory, ScanResults, track_findings
+from .config import read_if_contains
+from .models import FindingCategory, ScanResults, scanner_check
+from .subprocess_utils import run_safe
 
 logger = logging.getLogger(__name__)
 
 
 def scan_persistence(results: ScanResults, package: str) -> None:
     """Scan common persistence locations for package references."""
-    print_check_header("generic persistence locations")
-    with track_findings(results, "No suspicious persistence found"):
+    with scanner_check(results, "generic persistence locations",
+                       "No suspicious persistence found"):
         _check_crontab(results, package)
         _check_shell_rc(results, package)
         _check_tmp_scripts(results, package)
@@ -55,10 +55,6 @@ def scan_persistence(results: ScanResults, package: str) -> None:
 # ── Helpers ─────────────────────────────────────────────────────────────
 
 
-def _add_persistence(results: ScanResults, description: str, evidence: str) -> None:
-    results.add_finding(FindingCategory.PERSISTENCE, description, evidence, 2)
-
-
 def _check_config_dir(
     results: ScanResults,
     directory: Path,
@@ -73,10 +69,11 @@ def _check_config_dir(
         for config_file in directory.glob(glob_pattern):
             text = config_file.read_text(errors="ignore")
             if package in text:
-                _add_persistence(
-                    results,
+                results.add_finding(
+                    FindingCategory.PERSISTENCE,
                     f"{label}: {config_file.name}",
                     str(config_file),
+                    2,
                 )
     except (PermissionError, OSError):
         logger.debug("Cannot read %s", directory)
@@ -88,15 +85,17 @@ def _check_config_dir(
 def _check_crontab(results: ScanResults, package: str) -> None:
     if not shutil.which("crontab"):
         return
-    try:
-        output = subprocess.run(
-            ["crontab", "-l"], capture_output=True, text=True, timeout=5
-        ).stdout
-        for line in output.splitlines():
-            if package in line and not line.strip().startswith("#"):
-                _add_persistence(results, f"crontab: {line.strip()}", "crontab -l")
-    except (subprocess.TimeoutExpired, OSError):
-        logger.debug("Failed to read crontab")
+    output = run_safe(["crontab", "-l"])
+    if output is None:
+        return
+    for line in output.splitlines():
+        if package in line and not line.strip().startswith("#"):
+            results.add_finding(
+                FindingCategory.PERSISTENCE,
+                f"crontab: {line.strip()}",
+                "crontab -l",
+                2,
+            )
 
 
 def _check_shell_rc(results: ScanResults, package: str) -> None:
@@ -109,10 +108,11 @@ def _check_shell_rc(results: ScanResults, package: str) -> None:
             text = rc_path.read_text(errors="ignore")
             for i, line in enumerate(text.splitlines(), 1):
                 if package in line and not line.strip().startswith("#"):
-                    _add_persistence(
-                        results,
+                    results.add_finding(
+                        FindingCategory.PERSISTENCE,
                         f"{rc_name}:{i} mentions {package}",
                         str(rc_path),
+                        2,
                     )
         except (PermissionError, OSError):
             logger.debug("Cannot read %s", rc_path)
@@ -137,12 +137,8 @@ def _check_tmp_scripts(results: ScanResults, package: str) -> None:
 
 def _check_tmp_python_file(results: ScanResults, path: Path, package: str) -> None:
     """Flag a /tmp .py file only if it actually imports the package."""
-    try:
-        text = path.read_text(errors="ignore")
-    except (PermissionError, OSError):
-        return
-
-    if package not in text:
+    text = read_if_contains(path, package)
+    if text is None:
         return
 
     from .ast_scanner import scan_python_imports
@@ -153,22 +149,33 @@ def _check_tmp_python_file(results: ScanResults, path: Path, package: str) -> No
     if ast_refs is not None:
         # AST parsed successfully — trust its result
         if ast_refs:
-            _add_persistence(results, f"/tmp script: {path.name}", str(path))
+            results.add_finding(
+                FindingCategory.PERSISTENCE,
+                f"/tmp script: {path.name}",
+                str(path),
+                2,
+            )
     else:
         # SyntaxError fallback — check non-comment lines
         if _has_active_reference(text, package):
-            _add_persistence(results, f"/tmp script: {path.name}", str(path))
+            results.add_finding(
+                FindingCategory.PERSISTENCE,
+                f"/tmp script: {path.name}",
+                str(path),
+                2,
+            )
 
 
 def _check_tmp_shell_file(results: ScanResults, path: Path, package: str) -> None:
     """Flag a /tmp shell script only if it references the package."""
-    try:
-        text = path.read_text(errors="ignore")
-    except (PermissionError, OSError):
-        return
-
-    if _has_active_reference(text, package):
-        _add_persistence(results, f"/tmp script: {path.name}", str(path))
+    text = read_if_contains(path, package)
+    if text is not None and _has_active_reference(text, package):
+        results.add_finding(
+            FindingCategory.PERSISTENCE,
+            f"/tmp script: {path.name}",
+            str(path),
+            2,
+        )
 
 
 def _has_active_reference(text: str, package: str) -> bool:

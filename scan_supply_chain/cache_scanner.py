@@ -7,16 +7,14 @@ import os
 import sys
 from pathlib import Path
 
-from .formatting import print_check_header
-from .models import FindingCategory, ScanResults, track_findings
+from .models import FindingCategory, ScanResults, scanner_check
 
 logger = logging.getLogger(__name__)
 
 
 def scan_caches(results: ScanResults, package: str, ecosystem: str) -> None:
     """Check package manager caches for traces of the compromised package."""
-    print_check_header("package manager caches")
-    with track_findings(results, "No cache traces found"):
+    with scanner_check(results, "package manager caches", "No cache traces found"):
         if ecosystem == "pypi":
             _scan_pip_cache(results, package)
         elif ecosystem == "npm":
@@ -24,8 +22,7 @@ def scan_caches(results: ScanResults, package: str, ecosystem: str) -> None:
             _scan_pnpm_store(results, package)
 
 
-def _add_cache_finding(results: ScanResults, description: str, evidence: str) -> None:
-    results.add_finding(FindingCategory.CACHE_TRACE, description, evidence, 1)
+# ── Helpers ─────────────────────────────────────────────────────────────
 
 
 def _pip_cache_dir() -> Path:
@@ -39,55 +36,55 @@ def _pip_cache_dir() -> Path:
     return Path.home() / ".cache" / "pip"
 
 
-def _scan_pip_cache(results: ScanResults, package: str) -> None:
-    cache_dir = _pip_cache_dir()
+def _scan_cache_dir(
+    results: ScanResults,
+    cache_dir: Path,
+    package: str,
+    label: str,
+    *,
+    check_dirs: bool = False,
+    check_files: bool = True,
+) -> None:
+    """Walk a cache directory for entries matching the package name."""
     if not cache_dir.is_dir():
         return
     try:
         for dirpath, dirnames, filenames in os.walk(cache_dir):
-            for name in dirnames + filenames:
+            items: list[str] = []
+            if check_dirs:
+                items.extend(dirnames)
+            if check_files:
+                items.extend(filenames)
+            for name in items:
                 if package in name.lower():
-                    _add_cache_finding(
-                        results,
-                        f"pip cache: {name}",
+                    results.add_finding(
+                        FindingCategory.CACHE_TRACE,
+                        f"{label}: {name}",
                         os.path.join(dirpath, name),
+                        1,
                     )
                     return  # one hit per cache is enough
     except (PermissionError, OSError):
-        logger.debug("Cannot read pip cache at %s", cache_dir)
+        logger.debug("Cannot read %s at %s", label, cache_dir)
+
+
+def _scan_pip_cache(results: ScanResults, package: str) -> None:
+    _scan_cache_dir(
+        results, _pip_cache_dir(), package, "pip cache",
+        check_dirs=True, check_files=True,
+    )
 
 
 def _scan_npm_cache(results: ScanResults, package: str) -> None:
-    cache_dir = Path.home() / ".npm" / "_cacache"
-    if not cache_dir.is_dir():
-        return
-    try:
-        for dirpath, _, filenames in os.walk(cache_dir):
-            for fn in filenames:
-                if package in fn:
-                    _add_cache_finding(
-                        results,
-                        f"npm cache: {fn}",
-                        os.path.join(dirpath, fn),
-                    )
-                    return
-    except (PermissionError, OSError):
-        logger.debug("Cannot read npm cache")
+    _scan_cache_dir(
+        results, Path.home() / ".npm" / "_cacache", package, "npm cache",
+    )
 
 
 def _scan_pnpm_store(results: ScanResults, package: str) -> None:
-    store = Path.home() / ".local" / "share" / "pnpm" / "store"
-    if not store.is_dir():
-        return
-    try:
-        for dirpath, dirnames, _ in os.walk(store):
-            for d in dirnames:
-                if package in d:
-                    _add_cache_finding(
-                        results,
-                        f"pnpm store: {d}",
-                        os.path.join(dirpath, d),
-                    )
-                    return
-    except (PermissionError, OSError):
-        logger.debug("Cannot read pnpm store")
+    _scan_cache_dir(
+        results,
+        Path.home() / ".local" / "share" / "pnpm" / "store",
+        package, "pnpm store",
+        check_dirs=True, check_files=False,
+    )

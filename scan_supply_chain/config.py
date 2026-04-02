@@ -45,6 +45,18 @@ PHANTOM_WALK_SKIP_DIRS = _COMMON_SKIP_DIRS
 SOURCE_SCAN_SKIP_DIRS = _COMMON_SKIP_DIRS | {"site-packages", "node_modules"}
 
 
+def read_if_contains(path: Path, keyword: str) -> str | None:
+    """Read a text file if it mentions *keyword*; return text or ``None``."""
+    if not path.is_file():
+        return None
+    try:
+        text = path.read_text(errors="ignore")
+    except (PermissionError, OSError):
+        logger.debug("Cannot read %s", path)
+        return None
+    return text if keyword in text else None
+
+
 def pruned_walk(
     root: Path, skip_dirs: frozenset[str]
 ) -> Generator[tuple[str, list[str], list[str]], None, None]:

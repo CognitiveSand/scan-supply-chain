@@ -129,3 +129,15 @@ def track_findings(
         from .formatting import print_clean
 
         print_clean(clean_message)
+
+
+@contextmanager
+def scanner_check(
+    results: ScanResults, header: str, clean_message: str
+) -> Generator[None, None, None]:
+    """Print check header, then clean_message if no findings were added."""
+    from .formatting import print_check_header
+
+    print_check_header(header)
+    with track_findings(results, clean_message):
+        yield

@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.8.1 — 2026-04-02
+
+### Changed
+- **DRY: Platform base class** — `BasePlatformPolicy` provides default `home_conda_dirs()` and `_first_existing_dir()` helper. Linux and Darwin inherit defaults; Windows overrides casing.
+- **DRY: Cache scanner** — Three near-identical cache walkers (`pip`, `npm`, `pnpm`) unified into `_scan_cache_dir()` with configurable search targets.
+- **DRY: Subprocess helper** — New `subprocess_utils.run_safe()` replaces 4 identical `subprocess.run` try/except blocks across `persistence_scanner`, `ioc_windows`.
+- **DRY: File read helper** — New `config.read_if_contains()` replaces repeated read-then-check patterns in `persistence_scanner`, `history_scanner`.
+- **DRY: Scanner boilerplate** — New `scanner_check()` context manager combines `print_check_header()` + `track_findings()` into a single call.
+- **DRY: Inlined wrappers** — Removed trivial `_add_persistence()` and `_add_cache_finding()` one-liner delegates.
+- **DRY: Test helpers** — Shared `mock_run_safe`, `mock_subprocess_run`, `mock_tool_available`, `scan_results` fixture in `conftest.py`.
+- Named magic constant `_SEPARATOR_WIDTH` in `formatting.py`.
+- 355 tests, all passing.
+
+## 0.8.0 — 2026-04-01
+
+### Added
+- **Evidence scoring** — 4-tier confidence (LOW/MEDIUM/HIGH/CRITICAL) replaces binary clean/compromised verdict. New `Confidence` enum, `FindingCategory` enum, `Finding` dataclass, and `scoring.py` module.
+- **AST-based Python detection** — `ast_scanner.py` uses `ast.parse()` to find real imports and attribute access. Eliminates false positives from string literals, regex patterns, and comments. Falls back to regex on `SyntaxError`.
+- **Structured socket parsing** — `network_scanner.py` parses `ss`/`lsof` output into typed `ConnectionRecord` structs. C2 detection reports process name, PID, and executable path (Linux `/proc` enrichment).
+- **Persistence scanner** — `persistence_scanner.py` checks crontab, shell rc files, systemd user services, XDG autostart, `/tmp` scripts, and macOS LaunchAgents.
+- **Cache scanner** — `cache_scanner.py` checks pip, npm, and pnpm caches for traces of compromised packages. Ecosystem-gated.
+- **History scanner** — `history_scanner.py` searches `.bash_history` and `.zsh_history` for `pip install`/`npm install`/`yarn add`/`pnpm add` commands.
+- **Lockfile version extraction** — `yarn.lock` and `pnpm-lock.yaml` phantom dep reports now include the resolved version (e.g., `phantom:plain-crypto-js@4.2.1`).
+- 62 new tests. **348 tests total.**
+
+### Changed
+- C2 connection check uses structured parsing instead of IP substring matching.
+- Python source scanning uses AST first, regex as fallback (no change for JS/TS).
+- `ScanResults` gains a `findings` list alongside existing `iocs` (backward compatible).
+
 ## 0.7.0 — 2026-04-01
 
 ### Performance

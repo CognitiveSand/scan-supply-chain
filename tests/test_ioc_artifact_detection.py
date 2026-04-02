@@ -7,7 +7,6 @@ import socket
 import subprocess
 from pathlib import Path
 
-
 from scan_supply_chain.ioc_scanner import (
     _check_known_paths,
     _resolve_c2_ips,
@@ -16,7 +15,18 @@ from scan_supply_chain.ioc_scanner import (
     _scan_walk_files,
 )
 from scan_supply_chain.models import ScanResults
-from tests.conftest import StubPolicy, make_litellm_threat, make_axios_threat
+from tests.conftest import (
+    StubPolicy,
+    make_axios_threat,
+    make_litellm_threat,
+    mock_subprocess_run,
+    mock_subprocess_timeout,
+    mock_tool_available,
+)
+
+_SS_HDR = (
+    "State    Recv-Q Send-Q       Local Address:Port    Peer Address:Port Process\n"
+)
 
 
 # ── _check_known_paths ────────────────────────────────────────────────
@@ -264,16 +274,9 @@ class TestResolveC2Ips:
 
 
 class TestScanForC2Connections:
-    _SS_HDR = (
-        "State    Recv-Q Send-Q       Local Address:Port    Peer Address:Port Process\n"
-    )
-
     def _stub_ss(self, monkeypatch, data_line):
-        stdout_bytes = (self._SS_HDR + data_line).encode()
-        monkeypatch.setattr(
-            "scan_supply_chain.ioc_scanner.shutil.which",
-            lambda cmd: "/usr/bin/ss",
-        )
+        stdout_bytes = (_SS_HDR + data_line).encode()
+        mock_tool_available(monkeypatch, "ioc_scanner", "ss")
         monkeypatch.setattr(
             "scan_supply_chain.ioc_scanner.subprocess.run",
             lambda *a, **kw: subprocess.CompletedProcess(
@@ -322,8 +325,7 @@ class TestScanForC2Connections:
     def test_skips_when_network_tool_unavailable(self, monkeypatch, capsys):
         # @req FR-14 NFR-03
         monkeypatch.setattr(
-            "scan_supply_chain.ioc_scanner.shutil.which",
-            lambda cmd: None,
+            "scan_supply_chain.ioc_scanner.shutil.which", lambda cmd: None,
         )
 
         threat = make_litellm_threat()
@@ -348,16 +350,8 @@ class TestScanForC2Connections:
 
     def test_handles_subprocess_timeout(self, monkeypatch, capsys):
         # @req FR-14 NFR-04
-        monkeypatch.setattr(
-            "scan_supply_chain.ioc_scanner.shutil.which",
-            lambda cmd: "/usr/bin/ss",
-        )
-        monkeypatch.setattr(
-            "scan_supply_chain.ioc_scanner.subprocess.run",
-            lambda *a, **kw: (_ for _ in ()).throw(
-                subprocess.TimeoutExpired(cmd="ss", timeout=5),
-            ),
-        )
+        mock_tool_available(monkeypatch, "ioc_scanner", "ss")
+        mock_subprocess_timeout(monkeypatch, "ioc_scanner")
 
         threat = make_litellm_threat()
         policy = StubPolicy()
@@ -375,17 +369,10 @@ class TestScanForC2Connections:
 class TestScanForMaliciousPods:
     def test_flags_node_setup_pods(self, monkeypatch, capsys):
         # @req FR-19
-        monkeypatch.setattr(
-            "scan_supply_chain.ioc_scanner.shutil.which",
-            lambda cmd: "/usr/bin/kubectl" if cmd == "kubectl" else None,
-        )
-        monkeypatch.setattr(
-            "scan_supply_chain.ioc_scanner.subprocess.run",
-            lambda *a, **kw: subprocess.CompletedProcess(
-                args=a[0],
-                returncode=0,
-                stdout="node-setup-abc123  1/1  Running  0  2h\nkube-proxy-xyz  1/1  Running  0  5d\n",
-            ),
+        mock_tool_available(monkeypatch, "ioc_scanner", "kubectl")
+        mock_subprocess_run(
+            monkeypatch, "ioc_scanner",
+            "node-setup-abc123  1/1  Running  0  2h\nkube-proxy-xyz  1/1  Running  0  5d\n",
         )
 
         threat = make_litellm_threat()
@@ -397,17 +384,10 @@ class TestScanForMaliciousPods:
 
     def test_reports_clean_when_no_suspicious_pods(self, monkeypatch, capsys):
         # @req FR-19
-        monkeypatch.setattr(
-            "scan_supply_chain.ioc_scanner.shutil.which",
-            lambda cmd: "/usr/bin/kubectl" if cmd == "kubectl" else None,
-        )
-        monkeypatch.setattr(
-            "scan_supply_chain.ioc_scanner.subprocess.run",
-            lambda *a, **kw: subprocess.CompletedProcess(
-                args=a[0],
-                returncode=0,
-                stdout="kube-proxy-xyz  1/1  Running  0  5d\n",
-            ),
+        mock_tool_available(monkeypatch, "ioc_scanner", "kubectl")
+        mock_subprocess_run(
+            monkeypatch, "ioc_scanner",
+            "kube-proxy-xyz  1/1  Running  0  5d\n",
         )
 
         threat = make_litellm_threat()
@@ -421,8 +401,7 @@ class TestScanForMaliciousPods:
     def test_skips_when_kubectl_not_installed(self, monkeypatch, capsys):
         # @req FR-19 NFR-03
         monkeypatch.setattr(
-            "scan_supply_chain.ioc_scanner.shutil.which",
-            lambda cmd: None,
+            "scan_supply_chain.ioc_scanner.shutil.which", lambda cmd: None,
         )
 
         threat = make_litellm_threat()
@@ -447,22 +426,16 @@ class TestScanForMaliciousPods:
 
 
 class TestC2StructuredDetection:
-    def _ss_header(self):
-        return "State    Recv-Q Send-Q       Local Address:Port    Peer Address:Port Process\n"
-
     def test_c2_with_ports_detected(self, monkeypatch, capsys):
         # @req FR-15 FR-39
         threat = make_axios_threat()
         known_ip = threat.c2.ips["sfrclak.com"][0]
 
         ss_output = (
-            self._ss_header()
+            _SS_HDR
             + f'ESTAB    0      0          10.0.0.1:54321   {known_ip}:8000  users:(("python3",pid=99,fd=3))\n'
         )
-        monkeypatch.setattr(
-            "scan_supply_chain.ioc_scanner.shutil.which",
-            lambda cmd: "/usr/bin/ss",
-        )
+        mock_tool_available(monkeypatch, "ioc_scanner", "ss")
         monkeypatch.setattr(
             "scan_supply_chain.ioc_scanner.subprocess.run",
             lambda *a, **kw: subprocess.CompletedProcess(
@@ -488,13 +461,10 @@ class TestC2StructuredDetection:
         known_ip = threat.c2.ips["sfrclak.com"][0]
 
         ss_output = (
-            self._ss_header()
+            _SS_HDR
             + f'ESTAB    0      0          10.0.0.1:54321   {known_ip}:443   users:(("curl",pid=88,fd=5))\n'
         )
-        monkeypatch.setattr(
-            "scan_supply_chain.ioc_scanner.shutil.which",
-            lambda cmd: "/usr/bin/ss",
-        )
+        mock_tool_available(monkeypatch, "ioc_scanner", "ss")
         monkeypatch.setattr(
             "scan_supply_chain.ioc_scanner.subprocess.run",
             lambda *a, **kw: subprocess.CompletedProcess(

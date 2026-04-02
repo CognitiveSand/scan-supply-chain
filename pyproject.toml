@@ -1,6 +1,6 @@
 [project]
 name = "scan-supply-chain"
-version = "0.7.0"
+version = "0.8.1"
 description = "Supply chain compromise scanner — detects known PyPI and npm attacks via data-driven threat profiles"
 readme = "README.md"
 license = "MIT"

@@ -7,6 +7,24 @@ from pathlib import Path
 from typing import Protocol
 
 
+def _first_existing_dir(*candidates: Path) -> Path | None:
+    """Return the first candidate path that is an existing directory."""
+    for candidate in candidates:
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+class BasePlatformPolicy:
+    """Shared defaults for PlatformPolicy implementations."""
+
+    def home_conda_dirs(self) -> list[str]:
+        return ["miniconda3", "miniforge3", "anaconda3", ".conda"]
+
+    def home_pipx_dir(self) -> Path | None:
+        return _first_existing_dir(Path.home() / ".local" / "share" / "pipx")
+
+
 class PlatformPolicy(Protocol):
     """OS-specific infrastructure the scanner needs.
 

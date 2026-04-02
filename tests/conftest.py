@@ -1,5 +1,6 @@
 """Shared fixtures for the scan_supply_chain test suite."""
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -250,9 +251,51 @@ def axios_threat() -> ThreatProfile:
 # ── Shared test helpers ───────────────────────────────────────────────
 
 
+@pytest.fixture
+def scan_results() -> ScanResults:
+    """Fresh ScanResults with no compromised versions set."""
+    return ScanResults()
+
+
 def matches_any(patterns: list, line: str) -> bool:
     """Check if any regex pattern matches a line."""
     return any(p.search(line) for p in patterns)
+
+
+def mock_subprocess_run(monkeypatch, module: str, stdout: str) -> None:
+    """Patch subprocess.run in a scan_supply_chain module."""
+    monkeypatch.setattr(
+        f"scan_supply_chain.{module}.subprocess.run",
+        lambda *a, **kw: subprocess.CompletedProcess(
+            args=a[0], returncode=0, stdout=stdout,
+        ),
+    )
+
+
+def mock_subprocess_timeout(monkeypatch, module: str) -> None:
+    """Patch subprocess.run in a module to raise TimeoutExpired."""
+    monkeypatch.setattr(
+        f"scan_supply_chain.{module}.subprocess.run",
+        lambda *a, **kw: (_ for _ in ()).throw(
+            subprocess.TimeoutExpired(cmd=a[0], timeout=5),
+        ),
+    )
+
+
+def mock_run_safe(monkeypatch, module: str, stdout: str | None) -> None:
+    """Patch run_safe in a scan_supply_chain module."""
+    monkeypatch.setattr(
+        f"scan_supply_chain.{module}.run_safe",
+        lambda *a, **kw: stdout,
+    )
+
+
+def mock_tool_available(monkeypatch, module: str, tool: str) -> None:
+    """Patch shutil.which to find a specific tool."""
+    monkeypatch.setattr(
+        f"scan_supply_chain.{module}.shutil.which",
+        lambda cmd: f"/usr/bin/{tool}" if cmd == tool else None,
+    )
 
 
 @pytest.fixture

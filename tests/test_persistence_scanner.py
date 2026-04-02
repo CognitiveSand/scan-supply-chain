@@ -3,9 +3,8 @@
 Module under test: scan_supply_chain.persistence_scanner
 """
 
-import subprocess
-
 from scan_supply_chain.models import ScanResults
+from tests.conftest import mock_run_safe, mock_tool_available
 from scan_supply_chain.persistence_scanner import (
     _check_config_dir,
     _check_crontab,
@@ -20,17 +19,10 @@ from scan_supply_chain.persistence_scanner import (
 class TestCheckCrontab:
     def test_detects_package_in_crontab(self, monkeypatch):
         # @req FR-41
-        monkeypatch.setattr(
-            "scan_supply_chain.persistence_scanner.shutil.which",
-            lambda cmd: "/usr/bin/crontab",
-        )
-        monkeypatch.setattr(
-            "scan_supply_chain.persistence_scanner.subprocess.run",
-            lambda *a, **kw: subprocess.CompletedProcess(
-                args=a[0],
-                returncode=0,
-                stdout="*/5 * * * * python3 -c 'import litellm'\n",
-            ),
+        mock_tool_available(monkeypatch, "persistence_scanner", "crontab")
+        mock_run_safe(
+            monkeypatch, "persistence_scanner",
+            "*/5 * * * * python3 -c 'import litellm'\n",
         )
 
         results = ScanResults()
@@ -41,15 +33,10 @@ class TestCheckCrontab:
 
     def test_clean_when_no_match(self, monkeypatch):
         # @req FR-41
-        monkeypatch.setattr(
-            "scan_supply_chain.persistence_scanner.shutil.which",
-            lambda cmd: "/usr/bin/crontab",
-        )
-        monkeypatch.setattr(
-            "scan_supply_chain.persistence_scanner.subprocess.run",
-            lambda *a, **kw: subprocess.CompletedProcess(
-                args=a[0], returncode=0, stdout="0 * * * * /usr/bin/backup\n"
-            ),
+        mock_tool_available(monkeypatch, "persistence_scanner", "crontab")
+        mock_run_safe(
+            monkeypatch, "persistence_scanner",
+            "0 * * * * /usr/bin/backup\n",
         )
 
         results = ScanResults()
@@ -71,16 +58,8 @@ class TestCheckCrontab:
 
     def test_handles_timeout(self, monkeypatch):
         # @req FR-41 NFR-04
-        monkeypatch.setattr(
-            "scan_supply_chain.persistence_scanner.shutil.which",
-            lambda cmd: "/usr/bin/crontab",
-        )
-        monkeypatch.setattr(
-            "scan_supply_chain.persistence_scanner.subprocess.run",
-            lambda *a, **kw: (_ for _ in ()).throw(
-                subprocess.TimeoutExpired(cmd="crontab", timeout=5)
-            ),
-        )
+        mock_tool_available(monkeypatch, "persistence_scanner", "crontab")
+        mock_run_safe(monkeypatch, "persistence_scanner", None)
 
         results = ScanResults()
         _check_crontab(results, "litellm")
