@@ -62,6 +62,29 @@ def _check_known_paths(
 # ── Individual IOC scanners ──────────────────────────────────────────────
 
 
+def _hash_matches(
+    file_path: Path,
+    known_hashes: set[str],
+    skip_report,
+) -> bool:
+    """Return True if *file_path*'s sha256 is in *known_hashes*.
+
+    Unreadable files (PermissionError / OSError) are recorded in
+    ``skip_report`` and return True — the file matched by name, so the
+    walker still reports it as suspicious; the operator sees in the
+    skip-summary why no hash comparison happened.
+    """
+    try:
+        digest = hashlib.sha256(file_path.read_bytes()).hexdigest()
+    except PermissionError:
+        skip_report.record_permission(file_path)
+        return True
+    except OSError as exc:
+        skip_report.record_read_error(file_path, type(exc).__name__)
+        return True
+    return digest in known_hashes
+
+
 def _scan_walk_files(results: ScanResults, ctx: ScanContext) -> None:
     """Walk filesystem looking for IOC files by name (and optionally hash)."""
     for walk_ioc in ctx.threat.walk_files:
@@ -81,22 +104,10 @@ def _scan_walk_files(results: ScanResults, ctx: ScanContext) -> None:
                     if fn not in target_names:
                         continue
                     file_path = Path(dirpath) / fn
-                    # If hashes are specified, verify
-                    if known_hashes:
-                        try:
-                            digest = hashlib.sha256(file_path.read_bytes()).hexdigest()
-                            if digest not in known_hashes:
-                                continue
-                        except PermissionError:
-                            # Can't read — still report as suspicious,
-                            # but record the path for the post-scan
-                            # summary so the operator knows why no hash
-                            # comparison happened.
-                            ctx.skip_report.record_permission(file_path)
-                        except OSError as exc:
-                            ctx.skip_report.record_read_error(
-                                file_path, type(exc).__name__
-                            )
+                    if known_hashes and not _hash_matches(
+                        file_path, known_hashes, ctx.skip_report
+                    ):
+                        continue
                     print_ioc_found(str(file_path))
                     results.iocs.append(str(file_path))
                     found = True
@@ -128,15 +139,57 @@ def _resolve_c2_ips(ctx: ScanContext) -> dict[str, list[str]]:
     return result
 
 
+def _run_network_probe(command: list[str]):
+    """Run the platform network-listing command and parse its output.
+
+    Returns the parsed ``ConnectionRecord`` list, or ``None`` if the
+    subprocess timed out or errored — callers report that as 'no
+    suspicious connections' rather than crashing the scan.
+    """
+    from .network_scanner import parse_lsof_output, parse_ss_output
+
+    try:
+        raw_output = subprocess.run(
+            command, capture_output=True, timeout=5
+        ).stdout.decode(errors="replace")
+    except (subprocess.TimeoutExpired, OSError):
+        logger.debug("Failed to run network check command")
+        return None
+
+    parser = parse_lsof_output if command[0] == "lsof" else parse_ss_output
+    return parser(raw_output)
+
+
+def _emit_c2_finding(
+    results: ScanResults, record, domain: str
+) -> None:
+    """Print + record one matched C2 connection."""
+    from .models import Finding, FindingCategory
+    from .network_scanner import enrich_from_proc
+
+    record = enrich_from_proc(record)
+    proc = record.process_name or "unknown"
+    pid_str = f" (PID {record.pid})" if record.pid else ""
+    exe_str = f" [{record.exe_path}]" if record.exe_path else ""
+    desc = (
+        f"{proc}{pid_str}{exe_str} -> "
+        f"{domain} ({record.peer_ip}:{record.peer_port})"
+    )
+    print(f"  {RED}{BOLD}! ACTIVE CONNECTION: {desc}{RESET}")
+    results.iocs.append(f"connection:{domain}:{record.peer_ip}")
+    results.findings.append(
+        Finding(
+            category=FindingCategory.C2_CONNECTION,
+            description=desc,
+            evidence=f"{record.peer_ip}:{record.peer_port}",
+            weight=4,
+        )
+    )
+
+
 def _scan_for_c2_connections(results: ScanResults, ctx: ScanContext) -> None:
     """Check active network connections for C2 domain communication."""
-    from .models import Finding, FindingCategory
-    from .network_scanner import (
-        enrich_from_proc,
-        find_c2_connections,
-        parse_lsof_output,
-        parse_ss_output,
-    )
+    from .network_scanner import find_c2_connections
 
     threat = ctx.threat
     if not threat.c2.domains and not threat.c2.ips:
@@ -155,44 +208,16 @@ def _scan_for_c2_connections(results: ScanResults, ctx: ScanContext) -> None:
         )
         return
 
-    found = False
+    records = _run_network_probe(command)
+    if records is None:
+        print_clean("No suspicious connections")
+        return
+
     domain_ips = _resolve_c2_ips(ctx)
-    try:
-        raw_output = subprocess.run(
-            command, capture_output=True, timeout=5
-        ).stdout.decode(errors="replace")
-
-        # Parse into structured records
-        if command[0] == "lsof":
-            records = parse_lsof_output(raw_output)
-        else:
-            records = parse_ss_output(raw_output)
-
-        matches = find_c2_connections(records, domain_ips, threat.c2.ports)
-        for record, domain in matches:
-            record = enrich_from_proc(record)
-            proc = record.process_name or "unknown"
-            pid_str = f" (PID {record.pid})" if record.pid else ""
-            exe_str = f" [{record.exe_path}]" if record.exe_path else ""
-            desc = (
-                f"{proc}{pid_str}{exe_str} -> "
-                f"{domain} ({record.peer_ip}:{record.peer_port})"
-            )
-            print(f"  {RED}{BOLD}! ACTIVE CONNECTION: {desc}{RESET}")
-            results.iocs.append(f"connection:{domain}:{record.peer_ip}")
-            results.findings.append(
-                Finding(
-                    category=FindingCategory.C2_CONNECTION,
-                    description=desc,
-                    evidence=f"{record.peer_ip}:{record.peer_port}",
-                    weight=4,
-                )
-            )
-            found = True
-    except (subprocess.TimeoutExpired, OSError):
-        logger.debug("Failed to run network check command")
-
-    if not found:
+    matches = find_c2_connections(records, domain_ips, threat.c2.ports)
+    for record, domain in matches:
+        _emit_c2_finding(results, record, domain)
+    if not matches:
         print_clean("No suspicious connections")
 
 

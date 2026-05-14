@@ -6,17 +6,23 @@ Module under test: scan_supply_chain.source_scanner
 import pytest
 
 from scan_supply_chain.ecosystem_pypi import PyPIPlugin
-from scan_supply_chain.source_scanner import _is_config_file
+from scan_supply_chain.source_scanner import _FileSelector
 from tests.conftest import matches_any
 
 
-# ── _is_config_file ──────────────────────────────────────────────────
+# ── _FileSelector.classify (config-file recognition) ─────────────────
+
+
+def _is_config(selector: _FileSelector, filename: str, extension: str) -> bool:
+    """Return True if *filename* is classified as a config file."""
+    _is_source, is_cfg = selector.classify(filename, extension)
+    return is_cfg
 
 
 class TestIsConfigFile:
     @pytest.fixture
-    def pypi(self):
-        return PyPIPlugin()
+    def selector(self):
+        return _FileSelector.from_ecosystem(PyPIPlugin())
 
     @pytest.mark.parametrize(
         "filename",
@@ -34,16 +40,10 @@ class TestIsConfigFile:
             "uv.lock",
         ],
     )
-    def test_recognizes_known_config_files(self, pypi, filename):
+    def test_recognizes_known_config_files(self, selector, filename):
         # @req FR-21
         ext = "." + filename.rsplit(".", 1)[-1] if "." in filename else ""
-        assert _is_config_file(
-            filename,
-            ext,
-            pypi.config_filenames,
-            pypi.config_extensions,
-            pypi.config_filename_pattern(),
-        )
+        assert _is_config(selector, filename, ext)
 
     @pytest.mark.parametrize(
         "filename",
@@ -52,15 +52,9 @@ class TestIsConfigFile:
             "requirements-test.txt",
         ],
     )
-    def test_recognizes_requirements_variants(self, pypi, filename):
+    def test_recognizes_requirements_variants(self, selector, filename):
         # @req FR-21
-        assert _is_config_file(
-            filename,
-            ".txt",
-            pypi.config_filenames,
-            pypi.config_extensions,
-            pypi.config_filename_pattern(),
-        )
+        assert _is_config(selector, filename, ".txt")
 
     @pytest.mark.parametrize(
         "filename",
@@ -71,16 +65,10 @@ class TestIsConfigFile:
             "image.png",
         ],
     )
-    def test_rejects_non_config_files(self, pypi, filename):
+    def test_rejects_non_config_files(self, selector, filename):
         # @req FR-21
         ext = "." + filename.rsplit(".", 1)[-1] if "." in filename else ""
-        assert not _is_config_file(
-            filename,
-            ext,
-            pypi.config_filenames,
-            pypi.config_extensions,
-            pypi.config_filename_pattern(),
-        )
+        assert not _is_config(selector, filename, ext)
 
 
 # ── Source pattern matching ──────────────────────────────────────────

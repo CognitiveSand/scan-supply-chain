@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -16,24 +17,68 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# ── File classification ──────────────────────────────────────────────────
+# ── Compiled patterns for one source-scan run ───────────────────────────
 
 
-def _is_config_file(
-    filename: str,
-    extension: str,
-    config_filenames: frozenset[str],
-    config_extensions: frozenset[str],
-    config_filename_pattern: re.Pattern | None,
-) -> bool:
-    """Check if a filename matches known config/dependency file patterns."""
-    if filename in config_filenames:
-        return True
-    if config_filename_pattern and config_filename_pattern.match(filename):
-        return True
-    if extension in config_extensions and "require" in filename.lower():
-        return True
-    return False
+@dataclass(frozen=True)
+class _SourcePatterns:
+    """Regex patterns for one package, pre-compiled per scan.
+
+    Collapses the (package, import_patterns, dep_patterns,
+    pinned_pattern) data clump previously passed as four arguments to
+    every line-scanning call.
+    """
+
+    package: str
+    imports: list[re.Pattern]
+    deps: list[re.Pattern]
+    pinned: re.Pattern
+
+    @classmethod
+    def from_ecosystem(cls, ecosystem, package: str) -> "_SourcePatterns":
+        return cls(
+            package=package,
+            imports=ecosystem.import_patterns(package),
+            deps=ecosystem.dep_patterns(package),
+            pinned=ecosystem.pinned_version_pattern(package),
+        )
+
+
+@dataclass(frozen=True)
+class _FileSelector:
+    """Pre-built filename / extension classifiers for one ecosystem."""
+
+    source_extensions: frozenset[str]
+    config_filenames: frozenset[str]
+    config_extensions: frozenset[str]
+    config_filename_pattern: re.Pattern | None
+
+    @classmethod
+    def from_ecosystem(cls, ecosystem) -> "_FileSelector":
+        return cls(
+            source_extensions=ecosystem.source_extensions,
+            config_filenames=ecosystem.config_filenames,
+            config_extensions=ecosystem.config_extensions,
+            config_filename_pattern=ecosystem.config_filename_pattern(),
+        )
+
+    def classify(self, filename: str, extension: str) -> tuple[bool, bool]:
+        """Return (is_source, is_config) for a filename + lowered extension."""
+        is_source = extension in self.source_extensions
+        is_config = self._is_config_file(filename, extension)
+        return is_source, is_config
+
+    def _is_config_file(self, filename: str, extension: str) -> bool:
+        if filename in self.config_filenames:
+            return True
+        if (
+            self.config_filename_pattern
+            and self.config_filename_pattern.match(filename)
+        ):
+            return True
+        if extension in self.config_extensions and "require" in filename.lower():
+            return True
+        return False
 
 
 # ── Single-file scanning ────────────────────────────────────────────────
@@ -43,10 +88,7 @@ def _scan_file_lines(
     file_path: Path,
     is_source: bool,
     results: ScanResults,
-    package: str,
-    import_patterns: list[re.Pattern],
-    dep_patterns: list[re.Pattern],
-    pinned_pattern: re.Pattern,
+    patterns: _SourcePatterns,
 ) -> None:
     """Scan a single file's lines for package references."""
     try:
@@ -55,7 +97,7 @@ def _scan_file_lines(
         return
 
     # Fast-path: skip files that don't mention the package at all
-    if package not in text:
+    if patterns.package not in text:
         return
 
     # For Python files, use AST for precise import detection.
@@ -64,7 +106,7 @@ def _scan_file_lines(
         from .ast_scanner import scan_python_imports
 
         lines = text.splitlines()
-        ast_refs = scan_python_imports(text, lines, package, str(file_path))
+        ast_refs = scan_python_imports(text, lines, patterns.package, str(file_path))
         if ast_refs is not None:
             results.source_refs.extend(ast_refs)
             return
@@ -72,19 +114,19 @@ def _scan_file_lines(
     # Regex path: used for non-Python source files (.js, .ts, etc.)
     # and as fallback when AST parsing fails.
     for line_number, line in enumerate(text.splitlines(), 1):
-        if package not in line:
+        if patterns.package not in line:
             continue
 
         stripped = line.strip()
 
         if is_source:
-            if any(p.search(line) for p in import_patterns):
+            if any(p.search(line) for p in patterns.imports):
                 results.source_refs.append(
                     SourceReference(str(file_path), line_number, stripped)
                 )
         else:
-            if any(p.search(line) for p in dep_patterns):
-                match = pinned_pattern.search(line)
+            if any(p.search(line) for p in patterns.deps):
+                match = patterns.pinned.search(line)
                 results.config_refs.append(
                     ConfigReference(
                         str(file_path),
@@ -98,51 +140,35 @@ def _scan_file_lines(
 # ── Public entry point ───────────────────────────────────────────────────
 
 
-def scan_source_and_configs(results: ScanResults, ctx: ScanContext) -> int:
-    """Scan source and config files for package usage.
+def _print_scan_header(selector: _FileSelector, scan_roots: list[str]) -> None:
+    ext_label = ", ".join(sorted(f"*{e}" for e in selector.source_extensions))
+    print(f"  Scanning {ext_label} files, config/dependency files, etc.")
+    print(f"  Search roots: {', '.join(scan_roots)}\n")
 
-    Returns the number of files scanned.
-    """
-    ecosystem = ctx.ecosystem
-    package = ctx.threat.package
-    scan_roots = ctx.roots  # already deduplicated by build_search_roots()
+
+def _walk_and_scan_files(
+    results: ScanResults,
+    ctx: ScanContext,
+    selector: _FileSelector,
+    patterns: _SourcePatterns,
+) -> int:
+    """Walk ctx.roots, dispatch each source/config file to _scan_file_lines."""
     scanner_dir = str(Path(__file__).resolve().parent)
     seen_files: set[str] = set()
     files_scanned = 0
 
-    source_exts = ecosystem.source_extensions
-    config_names = ecosystem.config_filenames
-    config_exts = ecosystem.config_extensions
-    cfg_fn_pattern = ecosystem.config_filename_pattern()
-    import_pats = ecosystem.import_patterns(package)
-    dep_pats = ecosystem.dep_patterns(package)
-    pinned_pat = ecosystem.pinned_version_pattern(package)
-
-    ext_label = ", ".join(sorted(f"*{e}" for e in source_exts))
-    print(f"  Scanning {ext_label} files, config/dependency files, etc.")
-    print(f"  Search roots: {', '.join(scan_roots)}\n")
-
-    for root in scan_roots:
+    for root in ctx.roots:
         root_path = Path(root)
         if not root_path.is_dir():
             continue
-        for dirpath, dirnames, filenames in pruned_walk(
+        for dirpath, _, filenames in pruned_walk(
             root_path, SOURCE_SCAN_SKIP_DIRS, ctx.skip_report
         ):
             dir_path = Path(dirpath)
-
             for filename in filenames:
                 file_path = dir_path / filename
                 extension = file_path.suffix.lower()
-                is_source = extension in source_exts
-                is_config = _is_config_file(
-                    filename,
-                    extension,
-                    config_names,
-                    config_exts,
-                    cfg_fn_pattern,
-                )
-
+                is_source, is_config = selector.classify(filename, extension)
                 if not is_source and not is_config:
                     continue
 
@@ -152,14 +178,17 @@ def scan_source_and_configs(results: ScanResults, ctx: ScanContext) -> int:
                 seen_files.add(file_str)
 
                 files_scanned += 1
-                _scan_file_lines(
-                    file_path,
-                    is_source,
-                    results,
-                    package,
-                    import_pats,
-                    dep_pats,
-                    pinned_pat,
-                )
+                _scan_file_lines(file_path, is_source, results, patterns)
 
     return files_scanned
+
+
+def scan_source_and_configs(results: ScanResults, ctx: ScanContext) -> int:
+    """Scan source and config files for package usage.
+
+    Returns the number of files scanned.
+    """
+    selector = _FileSelector.from_ecosystem(ctx.ecosystem)
+    patterns = _SourcePatterns.from_ecosystem(ctx.ecosystem, ctx.threat.package)
+    _print_scan_header(selector, ctx.roots)
+    return _walk_and_scan_files(results, ctx, selector, patterns)

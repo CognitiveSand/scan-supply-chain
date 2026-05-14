@@ -177,29 +177,15 @@ def _scan_single_threat(ctx: ScanContext) -> ScanResults:
     return results
 
 
-def main():
+def _configure_logging() -> None:
     logging.basicConfig(
         level=logging.WARNING,
         format="%(levelname)s: %(message)s",
     )
 
-    args = _parse_args()
 
-    if args.list_threats:
-        _do_list_threats()
-
-    threats = _resolve_threats(args)
-    if not threats:
-        print("No threat profiles found. Nothing to scan.")
-        sys.exit(0)
-
-    # Single SkipReport for the whole scan — shared across every threat's
-    # per-threat ScanContext and the anti-worm pre-pass so the post-scan
-    # summary aggregates skips from every filesystem walk.
-    skip_report = SkipReport()
-
-    policy = detect_platform()
-
+def _print_run_banner(policy, threats: list[ThreatProfile]) -> None:
+    """Print the top-of-scan banner: version, platform, threat list."""
     print_banner(__version__)
     print(f"  {BOLD}Platform:{RESET} {policy.name}")
     print(f"  {BOLD}NOTE:{RESET} {policy.exclusion_note}\n")
@@ -214,18 +200,27 @@ def main():
         )
     print()
 
+
+def _cache_search_roots(
+    threats: list[ThreatProfile], policy
+) -> dict[str, list[str]]:
+    """Build one search-root list per distinct ecosystem in *threats*."""
     roots_cache: dict[str, list[str]] = {}
     for threat in threats:
-        ecosystem = get_ecosystem(threat.ecosystem)
         if threat.ecosystem not in roots_cache:
+            ecosystem = get_ecosystem(threat.ecosystem)
             roots_cache[threat.ecosystem] = build_search_roots(policy, ecosystem)
+    return roots_cache
 
-    # Anti-worm pre-pass: one filesystem walk across the union of all
-    # ecosystem roots, matched against the aggregated worm indicators
-    # from every loaded threat profile.
-    anti_worm_results = _run_anti_worm_pass(threats, roots_cache, skip_report)
 
-    # Run pipeline for each threat
+def _dispatch_threats(
+    threats: list[ThreatProfile],
+    policy,
+    roots_cache: dict[str, list[str]],
+    resolve_c2: bool,
+    skip_report: SkipReport,
+) -> list[tuple[ThreatProfile, ScanResults]]:
+    """Run the 5-phase pipeline for each threat and collect results."""
     all_results: list[tuple[ThreatProfile, ScanResults]] = []
     for threat in threats:
         ctx = ScanContext(
@@ -233,11 +228,48 @@ def main():
             ecosystem=get_ecosystem(threat.ecosystem),
             policy=policy,
             roots=roots_cache[threat.ecosystem],
-            resolve_c2=args.resolve_c2,
+            resolve_c2=resolve_c2,
             skip_report=skip_report,
         )
         results = _scan_single_threat(ctx)
         all_results.append((threat, results))
+    return all_results
+
+
+def _compute_exit_code(
+    anti_worm_results: ScanResults,
+    all_results: list[tuple[ThreatProfile, ScanResults]],
+) -> int:
+    any_compromised = any(not r.is_clean for _, r in all_results)
+    any_worm_signals = not anti_worm_results.is_clean
+    return 1 if (any_compromised or any_worm_signals) else 0
+
+
+def main() -> int:
+    _configure_logging()
+    args = _parse_args()
+
+    if args.list_threats:
+        _do_list_threats()
+
+    threats = _resolve_threats(args)
+    if not threats:
+        print("No threat profiles found. Nothing to scan.")
+        return 0
+
+    # Single SkipReport for the whole scan — shared across every threat's
+    # per-threat ScanContext and the anti-worm pre-pass so the post-scan
+    # summary aggregates skips from every filesystem walk.
+    skip_report = SkipReport()
+    policy = detect_platform()
+
+    _print_run_banner(policy, threats)
+    roots_cache = _cache_search_roots(threats, policy)
+
+    anti_worm_results = _run_anti_worm_pass(threats, roots_cache, skip_report)
+    all_results = _dispatch_threats(
+        threats, policy, roots_cache, args.resolve_c2, skip_report
+    )
 
     # Final combined report — anti-worm section first, then per-threat,
     # then the skip-report telling the operator what coverage was missed.
@@ -246,9 +278,7 @@ def main():
     print_multi_threat_summary(all_results)
     print_skip_summary(skip_report)
 
-    any_compromised = any(not r.is_clean for _, r in all_results)
-    any_worm_signals = not anti_worm_results.is_clean
-    sys.exit(1 if (any_compromised or any_worm_signals) else 0)
+    return _compute_exit_code(anti_worm_results, all_results)
 
 
 def _run_phase3_iocs(results: ScanResults, ctx: ScanContext) -> None:
