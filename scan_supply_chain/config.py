@@ -44,6 +44,14 @@ PHANTOM_WALK_SKIP_DIRS = _COMMON_SKIP_DIRS
 # Phase 4 source scanner skips third-party code
 SOURCE_SCAN_SKIP_DIRS = _COMMON_SKIP_DIRS | {"site-packages", "node_modules"}
 
+# Anti-worm git-repo discovery: same as the common skip set, but
+# `.git` is allowed through (the walk looks *for* `.git/` directories).
+# Heavy third-party trees are still pruned.
+GIT_REPO_WALK_SKIP_DIRS = (_COMMON_SKIP_DIRS - {".git"}) | {
+    "node_modules",
+    "site-packages",
+}
+
 
 def read_if_contains(path: Path, keyword: str) -> str | None:
     """Read a text file if it mentions *keyword*; return text or ``None``."""

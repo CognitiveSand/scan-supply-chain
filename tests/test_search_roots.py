@@ -3,7 +3,7 @@
 Module under test: scan_supply_chain.search_roots
 """
 
-from scan_supply_chain.search_roots import _deduplicate_roots
+from scan_supply_chain.search_roots import deduplicate_roots
 
 
 class TestDeduplicateRoots:
@@ -13,7 +13,7 @@ class TestDeduplicateRoots:
         child = parent / "me"
         child.mkdir(parents=True)
 
-        result = _deduplicate_roots([str(parent), str(child)])
+        result = deduplicate_roots([str(parent), str(child)])
 
         assert result == [str(parent)]
 
@@ -23,7 +23,7 @@ class TestDeduplicateRoots:
         deep = root / "conda" / "envs" / "myenv"
         deep.mkdir(parents=True)
 
-        result = _deduplicate_roots([str(root), str(deep)])
+        result = deduplicate_roots([str(root), str(deep)])
 
         assert result == [str(root)]
 
@@ -34,7 +34,7 @@ class TestDeduplicateRoots:
         a.mkdir()
         b.mkdir()
 
-        result = _deduplicate_roots([str(a), str(b)])
+        result = deduplicate_roots([str(a), str(b)])
 
         assert len(result) == 2
 
@@ -45,7 +45,7 @@ class TestDeduplicateRoots:
         link = tmp_path / "link_to_me"
         link.symlink_to(real)
 
-        result = _deduplicate_roots([str(tmp_path / "home"), str(link)])
+        result = deduplicate_roots([str(tmp_path / "home"), str(link)])
 
         assert len(result) == 1
 
@@ -54,10 +54,10 @@ class TestDeduplicateRoots:
         exists = tmp_path / "real"
         exists.mkdir()
 
-        result = _deduplicate_roots([str(exists), str(tmp_path / "nope")])
+        result = deduplicate_roots([str(exists), str(tmp_path / "nope")])
 
         assert result == [str(exists)]
 
     def test_empty_input(self):
         # @req FR-13
-        assert _deduplicate_roots([]) == []
+        assert deduplicate_roots([]) == []

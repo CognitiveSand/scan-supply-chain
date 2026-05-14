@@ -23,11 +23,12 @@ def compute_confidence(findings: list[Finding]) -> Confidence | None:
     has_c2 = FindingCategory.C2_CONNECTION in categories
     has_phantom = FindingCategory.PHANTOM_DEP in categories
     has_persistence = FindingCategory.PERSISTENCE in categories
+    has_git_artifact = FindingCategory.GIT_ARTIFACT in categories
 
     if has_version and has_c2:
         return Confidence.CRITICAL
-    if has_version and (has_ioc_file or has_phantom):
+    if has_version and (has_ioc_file or has_phantom or has_git_artifact):
         return Confidence.HIGH
-    if has_version or has_persistence:
+    if has_version or has_persistence or has_git_artifact:
         return Confidence.MEDIUM
     return Confidence.LOW

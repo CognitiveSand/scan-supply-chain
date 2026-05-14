@@ -68,6 +68,32 @@ class WindowsIOC:
 
 
 @dataclass(frozen=True)
+class GitArtifactsIOC:
+    """Worm-class indicators that live in local git repos.
+
+    Consumed by the anti-worm pre-pass (``anti_worm_scanner``). Threat
+    profiles that describe self-propagating campaigns (Shai-Hulud and
+    similar) define this block; threats that don't, leave it empty.
+    """
+
+    workflow_filenames: tuple[str, ...] = ()
+    workflow_name_regexes: tuple[str, ...] = ()
+    branch_names: tuple[str, ...] = ()
+    commit_author_emails: tuple[str, ...] = ()
+    repo_descriptions: tuple[str, ...] = ()
+
+    @property
+    def is_empty(self) -> bool:
+        return not (
+            self.workflow_filenames
+            or self.workflow_name_regexes
+            or self.branch_names
+            or self.commit_author_emails
+            or self.repo_descriptions
+        )
+
+
+@dataclass(frozen=True)
 class RemediationInfo:
     rotate_secrets: bool = True
     install_command: str = ""
@@ -110,6 +136,7 @@ class ThreatProfile:
     kubernetes: KubernetesIOC = field(default_factory=KubernetesIOC)
     windows_ioc: WindowsIOC = field(default_factory=WindowsIOC)
     persistence_keywords: tuple[str, ...] = ()
+    git_artifacts: GitArtifactsIOC = field(default_factory=GitArtifactsIOC)
     remediation: RemediationInfo = field(default_factory=RemediationInfo)
 
 
@@ -145,6 +172,16 @@ def _parse_known_paths(raw_list: list[dict]) -> list[KnownPathIOC]:
         )
         for item in raw_list
     ]
+
+
+def _parse_git_artifacts(raw: dict) -> GitArtifactsIOC:
+    return GitArtifactsIOC(
+        workflow_filenames=tuple(raw.get("workflow_filenames", [])),
+        workflow_name_regexes=tuple(raw.get("workflow_name_regexes", [])),
+        branch_names=tuple(raw.get("branch_names", [])),
+        commit_author_emails=tuple(raw.get("commit_author_emails", [])),
+        repo_descriptions=tuple(raw.get("repo_descriptions", [])),
+    )
 
 
 def _parse_remediation(raw: dict) -> RemediationInfo:
@@ -186,6 +223,7 @@ def _parse_profile(data: dict) -> ThreatProfile:
         persistence_keywords=tuple(
             ioc.get("persistence_keywords", {}).get("terms", [])
         ),
+        git_artifacts=_parse_git_artifacts(ioc.get("git_artifacts", {})),
         remediation=_parse_remediation(data.get("remediation", {})),
     )
 

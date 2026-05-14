@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Anti-worm pre-pass** — single filesystem walk before the per-threat pipeline that discovers local git repositories and matches them against worm-class indicators aggregated from every loaded threat profile. Detects Shai-Hulud-style campaigns whose footprint is in `.git/description`, `.github/workflows/*.y[a]ml`, local branch names, and recent commit author emails. New modules: `git_repo_index.py`, `anti_worm_scanner.py`. New `[ioc.git_artifacts]` block in threat profiles (workflow filenames, regex patterns, branch names, commit author emails, repo descriptions). Per-repo corroboration scorer: workflow / description matches alone are HIGH; branch / author matches alone are LOW and escalate to HIGH when combined.
+- **`[ioc.persistence_keywords].terms`** — extra terms (e.g. standalone daemon names like `gh-token-monitor`) that the persistence scanner matches in addition to the package name. Catches payloads whose persistence artifacts don't carry the parent package's name.
+- New `FindingCategory.GIT_ARTIFACT`; scoring rules updated so a git artifact alone yields MEDIUM and version + git artifact yields HIGH.
+
+### Changed
+- `search_roots._deduplicate_roots` renamed to `deduplicate_roots` (now used by the anti-worm pre-pass to union ecosystem roots).
+
 ## 0.8.2 — 2026-04-02
 
 ### Changed

@@ -55,6 +55,31 @@ class TestComputeConfidence:
         ]
         assert compute_confidence(findings) == Confidence.HIGH
 
+    def test_git_artifact_alone_returns_medium(self):
+        # @req FR-35
+        findings = [
+            Finding(
+                FindingCategory.GIT_ARTIFACT,
+                "git artifact: workflow=discussion.yaml (/r)",
+                "/r",
+                3,
+            ),
+        ]
+        assert compute_confidence(findings) == Confidence.MEDIUM
+
+    def test_version_plus_git_artifact_returns_high(self):
+        # @req FR-35
+        findings = [
+            Finding(FindingCategory.VERSION_MATCH, "axios==1.14.1", "/env", 3),
+            Finding(
+                FindingCategory.GIT_ARTIFACT,
+                "git artifact: workflow=discussion.yaml (/r)",
+                "/r",
+                3,
+            ),
+        ]
+        assert compute_confidence(findings) == Confidence.HIGH
+
     def test_version_plus_phantom_dep_returns_high(self):
         # @req FR-35
         findings = [

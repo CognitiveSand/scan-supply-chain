@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .anti_worm_scanner import aggregate_indicators, scan_anti_worm
 from .discovery import find_package_metadata
 from .ecosystem_base import get_ecosystem
 from .formatting import (
@@ -17,15 +18,17 @@ from .formatting import (
     print_phase_header,
     print_separator,
 )
+from .git_repo_index import build_repo_index
 from .ioc_scanner import scan_iocs
 from .models import ScanResults
 from .platform_policy import detect_platform
 from .report import (
+    print_anti_worm_report,
     print_config_refs,
     print_multi_threat_summary,
     print_source_refs,
 )
-from .search_roots import build_search_roots
+from .search_roots import build_search_roots, deduplicate_roots
 from .source_scanner import scan_source_and_configs
 from .threat_profile import (
     ThreatProfile,
@@ -196,13 +199,20 @@ def main():
         )
     print()
 
-    # Run pipeline for each threat
-    all_results: list[tuple[ThreatProfile, ScanResults]] = []
     roots_cache: dict[str, list[str]] = {}
     for threat in threats:
         ecosystem = get_ecosystem(threat.ecosystem)
         if threat.ecosystem not in roots_cache:
             roots_cache[threat.ecosystem] = build_search_roots(policy, ecosystem)
+
+    # Anti-worm pre-pass: one filesystem walk across the union of all
+    # ecosystem roots, matched against the aggregated worm indicators
+    # from every loaded threat profile.
+    anti_worm_results = _run_anti_worm_pass(threats, roots_cache)
+
+    # Run pipeline for each threat
+    all_results: list[tuple[ThreatProfile, ScanResults]] = []
+    for threat in threats:
         roots = roots_cache[threat.ecosystem]
         results = _scan_single_threat(
             threat,
@@ -212,9 +222,48 @@ def main():
         )
         all_results.append((threat, results))
 
-    # Final combined report
+    # Final combined report — anti-worm section first, then per-threat
     print()
+    print_anti_worm_report(anti_worm_results)
     print_multi_threat_summary(all_results)
 
     any_compromised = any(not r.is_clean for _, r in all_results)
-    sys.exit(1 if any_compromised else 0)
+    any_worm_signals = not anti_worm_results.is_clean
+    sys.exit(1 if (any_compromised or any_worm_signals) else 0)
+
+
+def _run_anti_worm_pass(
+    threats: list[ThreatProfile],
+    roots_cache: dict[str, list[str]],
+) -> ScanResults:
+    """Run the anti-worm pre-pass and return its findings as a ScanResults.
+
+    Returns an empty (clean) ScanResults if no loaded threat defines any
+    worm indicators.
+    """
+    indicators = aggregate_indicators(threats)
+    results = ScanResults()
+    if indicators.is_empty:
+        return results
+
+    print_phase_header(0, "Anti-worm pre-pass: scanning local git repos...")
+    union_roots = deduplicate_roots(
+        [root for roots in roots_cache.values() for root in roots]
+    )
+    snapshots = build_repo_index(union_roots)
+    print(
+        f"  Scanned {BOLD}{len(snapshots)}{RESET} local git repo(s) "
+        f"against {BOLD}{_indicator_count(indicators)}{RESET} worm indicator(s)\n"
+    )
+    scan_anti_worm(results, indicators, snapshots)
+    return results
+
+
+def _indicator_count(indicators) -> int:
+    return (
+        len(indicators.workflow_filenames)
+        + len(indicators.workflow_name_regexes)
+        + len(indicators.branch_names)
+        + len(indicators.commit_author_emails)
+        + len(indicators.repo_descriptions)
+    )

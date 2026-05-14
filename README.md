@@ -163,6 +163,18 @@ schtask_keywords  = []
 # package name (e.g. a standalone helper installed by the payload).
 terms = []
 
+[ioc.git_artifacts]
+# Worm-class indicators that live in local git repositories. Consumed
+# by the anti-worm pre-pass (single walk per scan, across all loaded
+# threats). Workflow filenames and repo descriptions are independently
+# HIGH-signal; branch names and commit author emails are LOW alone but
+# escalate to HIGH when corroborated.
+workflow_filenames    = []
+workflow_name_regexes = []
+branch_names          = []
+commit_author_emails  = []
+repo_descriptions     = []
+
 [remediation]
 rotate_secrets  = true
 install_command = "pip install mypackage==1.0.0"

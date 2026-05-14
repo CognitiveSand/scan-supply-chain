@@ -55,6 +55,7 @@ class FindingCategory(Enum):
     HISTORY = "history"
     SOURCE_REF = "source_ref"
     PHANTOM_DEP = "phantom_dep"
+    GIT_ARTIFACT = "git_artifact"
 
 
 @dataclass(frozen=True)

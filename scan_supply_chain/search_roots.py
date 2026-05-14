@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from .platform_policy import PlatformPolicy
 
 
-def _deduplicate_roots(roots: list[str]) -> list[str]:
+def deduplicate_roots(roots: list[str]) -> list[str]:
     """Remove roots that are subdirectories of other roots.
 
     Given ["/home", "/home/me", "/opt"], returns ["/home", "/opt"]
@@ -64,4 +64,4 @@ def build_search_roots(
     if home_str not in roots:
         roots.append(home_str)
 
-    return _deduplicate_roots(roots)
+    return deduplicate_roots(roots)
