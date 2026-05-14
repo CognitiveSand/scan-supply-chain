@@ -270,34 +270,16 @@ def _scan_windows_extras(results: ScanResults, ctx: ScanContext) -> None:
     run_windows_ioc_checks(results, registry_kw, schtask_kw)
 
 
-# ── Public entry point ───────────────────────────────────────────────────
+# ── Public scanners ──────────────────────────────────────────────────────
+#
+# Phase-3 IOC scanners are exposed individually. Orchestration (which
+# scanners run in what order for a given threat) lives in
+# ``scanner._run_phase3_iocs`` so the static dependency graph shows
+# every scanner this module triggers.
 
-
-def scan_iocs(results: ScanResults, ctx: ScanContext) -> None:
-    """Run all IOC artifact scans for a single threat profile."""
-    threat = ctx.threat
-    if threat.walk_files:
-        _scan_walk_files(results, ctx)
-        print()
-
-    if threat.known_paths:
-        _scan_known_paths(results, ctx)
-        print()
-
-    _scan_for_c2_connections(results, ctx)
-
-    _scan_for_malicious_pods(results, ctx)
-
-    _scan_phantom_deps(results, ctx)
-
-    _scan_windows_extras(results, ctx)
-
-    from .cache_scanner import scan_caches
-    from .history_scanner import scan_history
-    from .persistence_scanner import scan_persistence
-
-    scan_persistence(
-        results, threat.package, threat.persistence_keywords, ctx.skip_report
-    )
-    scan_caches(results, threat.package, threat.ecosystem)
-    scan_history(results, threat.package, threat.ecosystem, ctx.skip_report)
+scan_walk_files = _scan_walk_files
+scan_known_paths = _scan_known_paths
+scan_for_c2_connections = _scan_for_c2_connections
+scan_for_malicious_pods = _scan_for_malicious_pods
+scan_phantom_deps = _scan_phantom_deps
+scan_windows_extras = _scan_windows_extras

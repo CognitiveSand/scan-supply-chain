@@ -18,9 +18,19 @@ from .formatting import (
     print_phase_header,
     print_separator,
 )
+from .cache_scanner import scan_caches
 from .git_repo_index import build_repo_index
-from .ioc_scanner import scan_iocs
+from .history_scanner import scan_history
+from .ioc_scanner import (
+    scan_for_c2_connections,
+    scan_for_malicious_pods,
+    scan_known_paths,
+    scan_phantom_deps,
+    scan_walk_files,
+    scan_windows_extras,
+)
 from .models import ScanResults
+from .persistence_scanner import scan_persistence
 from .platform_policy import detect_platform
 from .scan_context import ScanContext
 from .report import (
@@ -148,7 +158,7 @@ def _scan_single_threat(ctx: ScanContext) -> ScanResults:
 
     # Phase 3: IOC artifact scan
     print_phase_header(3, "Scanning for IOC artifacts...")
-    scan_iocs(results, ctx)
+    _run_phase3_iocs(results, ctx)
 
     # Phase 4: Source & config scan
     print_phase_header(
@@ -239,6 +249,36 @@ def main():
     any_compromised = any(not r.is_clean for _, r in all_results)
     any_worm_signals = not anti_worm_results.is_clean
     sys.exit(1 if (any_compromised or any_worm_signals) else 0)
+
+
+def _run_phase3_iocs(results: ScanResults, ctx: ScanContext) -> None:
+    """Run every phase-3 IOC scanner for a single threat profile.
+
+    Lives here rather than in ``ioc_scanner`` so the full set of
+    scanners triggered for one threat is visible at module top of
+    ``scanner.py`` (the orchestration layer), and so cache / history /
+    persistence scanners do not have to be lazy-imported from inside
+    ``ioc_scanner.scan_iocs``.
+    """
+    threat = ctx.threat
+    if threat.walk_files:
+        scan_walk_files(results, ctx)
+        print()
+
+    if threat.known_paths:
+        scan_known_paths(results, ctx)
+        print()
+
+    scan_for_c2_connections(results, ctx)
+    scan_for_malicious_pods(results, ctx)
+    scan_phantom_deps(results, ctx)
+    scan_windows_extras(results, ctx)
+
+    scan_persistence(
+        results, threat.package, threat.persistence_keywords, ctx.skip_report
+    )
+    scan_caches(results, threat.package, threat.ecosystem)
+    scan_history(results, threat.package, threat.ecosystem, ctx.skip_report)
 
 
 def _run_anti_worm_pass(
