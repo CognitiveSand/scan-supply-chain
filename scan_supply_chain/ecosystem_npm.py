@@ -8,6 +8,10 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .skip_report import SkipReport
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +49,9 @@ class NpmPlugin:
         escaped = re.escape(package)
         return re.compile(rf"^{escaped}$")
 
-    def extract_version(self, metadata_path: Path, skip_report) -> str | None:
+    def extract_version(
+        self, metadata_path: Path, skip_report: SkipReport
+    ) -> str | None:
         """Read version from node_modules/{pkg}/package.json."""
         pkg_json = metadata_path / "package.json"
         if not pkg_json.is_file():
@@ -135,7 +141,7 @@ class NpmPlugin:
         self,
         names: list[str],
         search_roots: list[str],
-        skip_report,
+        skip_report: SkipReport,
     ) -> list[str]:
         """Check for phantom npm dependencies in node_modules."""
         if not names:

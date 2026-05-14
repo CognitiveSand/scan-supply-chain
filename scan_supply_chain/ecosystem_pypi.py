@@ -5,6 +5,10 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .skip_report import SkipReport
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +50,9 @@ class PyPIPlugin:
         escaped = re.escape(package)
         return re.compile(rf"^{escaped}-([^/\\]+)\.(dist-info|egg-info)$")
 
-    def extract_version(self, metadata_path: Path, skip_report) -> str | None:
+    def extract_version(
+        self, metadata_path: Path, skip_report: SkipReport
+    ) -> str | None:
         """Read Version from METADATA or PKG-INFO; fallback to dir name."""
         version_re = re.compile(r"^Version:\s*(.+)$", re.MULTILINE)
 
@@ -109,7 +115,7 @@ class PyPIPlugin:
         self,
         names: list[str],
         search_roots: list[str],
-        skip_report,
+        skip_report: SkipReport,
     ) -> list[str]:
         """Check for phantom PyPI packages in site-packages."""
         if not names:
@@ -136,7 +142,7 @@ class PyPIPlugin:
         return found
 
 
-def _walk_site_packages(root: Path, skip_report):
+def _walk_site_packages(root: Path, skip_report: SkipReport):
     """Walk looking for site-packages, then check contents."""
     from .config import PHANTOM_WALK_SKIP_DIRS, pruned_walk
 

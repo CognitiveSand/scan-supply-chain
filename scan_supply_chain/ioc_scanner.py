@@ -25,6 +25,7 @@ from .models import ScanResults
 
 if TYPE_CHECKING:
     from .scan_context import ScanContext
+    from .skip_report import SkipReport
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,7 @@ def _check_known_paths(
     description: str,
     paths: Iterable[Path],
     results: ScanResults,
-    skip_report,
+    skip_report: SkipReport,
 ) -> None:
     """Check a list of known paths for IOC artifacts."""
     print_check_header(description)
@@ -65,7 +66,7 @@ def _check_known_paths(
 def _hash_matches(
     file_path: Path,
     known_hashes: set[str],
-    skip_report,
+    skip_report: SkipReport,
 ) -> bool:
     """Return True if *file_path*'s sha256 is in *known_hashes*.
 

@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .anti_worm_scanner import aggregate_indicators, scan_anti_worm
+from .anti_worm_scanner import WormIndicators, aggregate_indicators, scan_anti_worm
 from .discovery import find_package_metadata
 from .ecosystem_base import get_ecosystem
 from .formatting import (
@@ -31,7 +31,7 @@ from .ioc_scanner import (
 )
 from .models import ScanResults
 from .persistence_scanner import scan_persistence
-from .platform_policy import detect_platform
+from .platform_policy import PlatformPolicy, detect_platform
 from .scan_context import ScanContext
 from .report import (
     print_anti_worm_report,
@@ -184,7 +184,7 @@ def _configure_logging() -> None:
     )
 
 
-def _print_run_banner(policy, threats: list[ThreatProfile]) -> None:
+def _print_run_banner(policy: PlatformPolicy, threats: list[ThreatProfile]) -> None:
     """Print the top-of-scan banner: version, platform, threat list."""
     print_banner(__version__)
     print(f"  {BOLD}Platform:{RESET} {policy.name}")
@@ -202,7 +202,7 @@ def _print_run_banner(policy, threats: list[ThreatProfile]) -> None:
 
 
 def _cache_search_roots(
-    threats: list[ThreatProfile], policy
+    threats: list[ThreatProfile], policy: PlatformPolicy
 ) -> dict[str, list[str]]:
     """Build one search-root list per distinct ecosystem in *threats*."""
     roots_cache: dict[str, list[str]] = {}
@@ -215,7 +215,7 @@ def _cache_search_roots(
 
 def _dispatch_threats(
     threats: list[ThreatProfile],
-    policy,
+    policy: PlatformPolicy,
     roots_cache: dict[str, list[str]],
     resolve_c2: bool,
     skip_report: SkipReport,
@@ -339,7 +339,7 @@ def _run_anti_worm_pass(
     return results
 
 
-def _indicator_count(indicators) -> int:
+def _indicator_count(indicators: WormIndicators) -> int:
     return (
         len(indicators.workflow_filenames)
         + len(indicators.workflow_name_regexes)

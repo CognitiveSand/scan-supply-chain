@@ -5,7 +5,10 @@ from __future__ import annotations
 import functools
 import re
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from .skip_report import SkipReport
 
 
 class EcosystemPlugin(Protocol):
@@ -39,7 +42,9 @@ class EcosystemPlugin(Protocol):
         """Regex matching a metadata directory name for the given package."""
         ...
 
-    def extract_version(self, metadata_path: Path, skip_report) -> str | None:
+    def extract_version(
+        self, metadata_path: Path, skip_report: "SkipReport"
+    ) -> str | None:
         """Extract the package version from a metadata directory or file.
 
         ``skip_report`` receives any permission / read errors so the
@@ -74,7 +79,7 @@ class EcosystemPlugin(Protocol):
         self,
         names: list[str],
         search_roots: list[str],
-        skip_report,
+        skip_report: "SkipReport",
     ) -> list[str]:
         """Check for phantom dependencies that should not exist.
 
