@@ -1,0 +1,196 @@
+[threat]
+id          = "mini-shai-hulud-2026-05"
+name        = "Mini Shai-Hulud npm Worm (TanStack wave)"
+date        = "2026-05-11"
+ecosystem   = "npm"
+package     = "@tanstack/react-router"
+compromised = ["1.169.5", "1.169.8"]
+safe        = "1.169.9"
+advisory    = "https://github.com/advisories/GHSA-g7cv-rxg3-hmpx"
+description = """\
+Third documented wave (a.k.a. "Mini Shai-Hulud"). On 2026-05-11 \
+between 19:20 and 19:26 UTC, 84 malicious npm packages — two \
+versions of 42 distinct @tanstack/* packages plus packages from \
+Mistral AI, UiPath, Guardrails AI, and Squawk — were published \
+through the projects' own GitHub Actions release pipelines using \
+hijacked OIDC tokens. First documented npm worm producing validly \
+signed packages with SLSA Build Level 3 provenance attestations. \
+Anchor here is @tanstack/react-router (compromised 1.169.5 and \
+1.169.8); the IOC walk and anti-worm pre-pass catch infections \
+from any of the other 41 @tanstack packages. Payload: router_init.js \
+(embedded in compromised packages) drops tanstack_runner.js, which \
+reads GitHub Actions runner process memory to extract every secret \
+in scope and exfiltrates via Session messenger, the git-tanstack \
+typosquat domain, and GitHub GraphQL dead-drops. Adds host-side \
+persistence hooks in Claude Code, VS Code, and a gh-token-monitor \
+daemon that runs `rm -rf ~/` if its token is revoked."""
+
+# ── C2 Infrastructure ───────────────────────────────────────────
+# Typosquat exfil domain. Listing it without known IPs means the
+# network check is only meaningful with --resolve-c2.
+[c2]
+domains = ["git-tanstack.com"]
+ports   = []
+
+[c2.ips]
+
+# ── IOC: Files to walk-search across filesystem ─────────────────
+[[ioc.walk_files]]
+description = "router_init.js (Mini wave payload, hash-verified)"
+filenames   = ["router_init.js"]
+sha256      = [
+    "ab4fcadaec49c03278063dd269ea5eef82d24f2124a8e15d7b90f2fa8601266c",
+]
+
+[[ioc.walk_files]]
+description = "tanstack_runner.js (Mini wave runner, hash-verified)"
+filenames   = ["tanstack_runner.js"]
+sha256      = [
+    "2ec78d556d696e208927cc503d48e4b5eb56b31abc2870c2ed2e98d6be27fc96",
+]
+
+# ── IOC: Known paths (per-platform) ─────────────────────────────
+# The Mini wave reuses the staging-dump pattern of earlier waves.
+[[ioc.known_paths]]
+description = "harvested-secret staging dumps"
+linux       = [
+    "/tmp/truffleSecrets.json",
+    "/tmp/cloud.json",
+    "/tmp/actionsSecrets.json",
+    "/tmp/contents.json",
+    "/tmp/environment.json",
+    "/tmp/format.json",
+]
+darwin      = [
+    "/tmp/truffleSecrets.json",
+    "/tmp/cloud.json",
+    "/tmp/actionsSecrets.json",
+    "/tmp/contents.json",
+    "/tmp/environment.json",
+    "/tmp/format.json",
+]
+windows     = [
+    '%TEMP%\truffleSecrets.json',
+    '%TEMP%\cloud.json',
+    '%TEMP%\actionsSecrets.json',
+    '%TEMP%\contents.json',
+    '%TEMP%\environment.json',
+    '%TEMP%\format.json',
+]
+
+# ── IOC: Phantom dependencies ───────────────────────────────────
+[ioc.phantom_deps]
+names = []
+
+# ── IOC: Kubernetes ──────────────────────────────────────────────
+[ioc.kubernetes]
+pod_patterns = []
+namespace    = ""
+
+# ── IOC: Windows-specific ────────────────────────────────────────
+[ioc.windows]
+registry_keywords = ["shai-hulud", "gh-token-monitor"]
+schtask_keywords  = ["shai-hulud", "gh-token-monitor"]
+
+# ── IOC: Persistence keywords ───────────────────────────────────
+# The Mini wave's PBKDF2 salt `svksjrhjkcejg` is a campaign-unique
+# string — including it gives the persistence scanner a literal
+# match against any config that embeds the encryption marker.
+[ioc.persistence_keywords]
+terms = [
+    "gh-token-monitor",
+    "shai-hulud",
+    "svksjrhjkcejg",
+]
+
+# ── IOC: Git artifacts (anti-worm pre-pass) ─────────────────────
+[ioc.git_artifacts]
+workflow_filenames    = [
+    "shai-hulud-workflow.yml",
+    "shai-hulud-workflow.yaml",
+    "discussion.yaml",
+]
+workflow_name_regexes = ['^formatter_\d+\.ya?ml$']
+branch_names = [
+    "atreides",
+    "cogitor",
+    "fedaykin",
+    "fremen",
+    "futar",
+    "gesserit",
+    "ghola",
+    "harkonnen",
+    "heighliner",
+    "kanly",
+    "kralizec",
+    "lasgun",
+    "laza",
+    "melange",
+    "mentat",
+    "navigator",
+    "ornithopter",
+    "phibian",
+    "powindah",
+    "prana",
+    "prescient",
+    "sandworm",
+    "sardaukar",
+    "sayyadina",
+    "sietch",
+    "siridar",
+    "slig",
+    "stillsuit",
+    "thumper",
+    "tleilaxu",
+]
+commit_author_emails  = ["claude@users.noreply.github.com"]
+repo_descriptions     = [
+    "Shai-Hulud: Here We Go Again",
+]
+
+# ── Remediation ──────────────────────────────────────────────────
+[remediation]
+rotate_secrets  = true
+install_command = "npm install @tanstack/react-router@1.169.9"
+
+[remediation.remove_artifacts]
+linux   = [
+    "Delete router_init.js and tanstack_runner.js inside compromised package node_modules/ subtrees",
+    "Remove /tmp/truffleSecrets.json, /tmp/cloud.json, /tmp/actionsSecrets.json, /tmp/contents.json, /tmp/environment.json, /tmp/format.json",
+    "Remove any .github/workflows/discussion.yaml or formatter_<digits>.yml backdoor workflows",
+    "Delete public 'Shai-Hulud' repositories that appeared under your GitHub account",
+    "Block egress to git-tanstack.com at DNS/firewall",
+]
+darwin  = [
+    "Delete router_init.js and tanstack_runner.js inside compromised package node_modules/ subtrees",
+    "Remove staging .json files under /tmp",
+    "Remove any .github/workflows/discussion.yaml or formatter_<digits>.yml backdoor workflows",
+    "Delete public 'Shai-Hulud' repositories that appeared under your GitHub account",
+    "Block egress to git-tanstack.com at DNS/firewall",
+]
+windows = [
+    "Delete router_init.js and tanstack_runner.js inside compromised package node_modules\\ subtrees",
+    'Remove staging .json files under %TEMP%',
+    "Remove any .github\\workflows\\discussion.yaml or formatter_<digits>.yml backdoor workflows",
+    "Delete public 'Shai-Hulud' repositories that appeared under your GitHub account",
+    "Block egress to git-tanstack.com at DNS/firewall",
+]
+
+[remediation.check_persistence]
+linux   = [
+    "systemctl --user list-units | grep -i gh-token-monitor",
+    "grep -RIl 'svksjrhjkcejg' ~/ 2>/dev/null   # campaign-unique PBKDF2 salt",
+    "Audit Claude Code and VS Code extension manifests for unauthorized hooks",
+    "Audit GitHub Actions secrets and OIDC tokens for unauthorized use",
+]
+darwin  = [
+    "launchctl list | grep -i gh-token-monitor",
+    "ls ~/Library/LaunchAgents/ | grep -i gh-token",
+    "grep -RIl 'svksjrhjkcejg' ~/ 2>/dev/null   # campaign-unique PBKDF2 salt",
+    "Audit Claude Code and VS Code extension manifests for unauthorized hooks",
+]
+windows = [
+    "schtasks /query | findstr /I gh-token-monitor",
+    "Audit Claude Code and VS Code extension manifests for unauthorized hooks",
+    "Audit GitHub Actions secrets and OIDC tokens for unauthorized use",
+]

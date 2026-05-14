@@ -1,0 +1,202 @@
+[threat]
+id          = "sha1-hulud-2025-11"
+name        = "Sha1-Hulud 2.0 npm Worm (TeamPCP, second wave)"
+date        = "2025-11-24"
+ecosystem   = "npm"
+package     = "posthog-node"
+compromised = ["4.18.1", "5.11.3", "5.13.3"]
+safe        = "5.14.0"
+advisory    = "https://github.com/PostHog/posthog-js/issues/2633"
+description = """\
+Second wave of the Shai-Hulud worm (sometimes spelled "Sha1-Hulud"). \
+~800 npm packages compromised across @postman, @asyncapi/cli, \
+@zapier/zapier-sdk, @ensdomains/*, PostHog SDKs, and others, between \
+2025-11-24 04:11 UTC and ~09:30 UTC. Anchor here is posthog-node \
+because its compromised version triple (4.18.1 / 5.11.3 / 5.13.3) is \
+publicly enumerated and the package is widely consumed; users \
+affected through a different maintainer's package will still be \
+caught by the IOC walk and the anti-worm pre-pass. New payloads \
+relative to the September wave: setup_bun.js drops a 10 MB \
+obfuscated bun_environment.js that runs TruffleHog, harvests \
+CI/CD secrets, exfiltrates to typosquat / webhook infrastructure, \
+and republishes infected versions of every npm package owned by the \
+compromised maintainer. Adds Docker sudoers privilege escalation \
+and a SHA1HULUD self-hosted GitHub Actions runner."""
+
+# ── C2 Infrastructure ───────────────────────────────────────────
+# Exfil targets are shared infrastructure (webhook.site, Session
+# messenger, GitHub GraphQL dead-drops). Listing them as C2 IPs would
+# false-positive on legitimate use. Domain-only entries let users
+# opt in to live DNS checks via --resolve-c2.
+[c2]
+domains = []
+ports   = []
+
+[c2.ips]
+
+# ── IOC: Files to walk-search across filesystem ─────────────────
+[[ioc.walk_files]]
+description = "bun_environment.js (2.0 payload, hash-verified)"
+filenames   = ["bun_environment.js"]
+sha256      = [
+    "62ee164b9b306250c1172583f138c9614139264f889fa99614903c12755468d0",
+    "f099c5d9ec417d4445a0328ac0ada9cde79fc37410914103ae9c609cbc0ee068",
+    "cbb9bc5a8496243e02f3cc080efbe3e4a1430ba0671f2e43a202bf45b05479cd",
+]
+
+[[ioc.walk_files]]
+description = "setup_bun.js (2.0 dropper, hash-verified)"
+filenames   = ["setup_bun.js"]
+sha256      = [
+    "a3894003ad1d293ba96d77881ccd2071446dc3f65f434669b49b3da92421901a",
+]
+
+# ── IOC: Known paths (per-platform) ─────────────────────────────
+# Same staging dumps as the September wave. Listed again here so a
+# `--threat sha1-hulud-2025-11` run is self-contained.
+[[ioc.known_paths]]
+description = "harvested-secret staging dumps"
+linux       = [
+    "/tmp/truffleSecrets.json",
+    "/tmp/cloud.json",
+    "/tmp/actionsSecrets.json",
+    "/tmp/contents.json",
+    "/tmp/environment.json",
+    "/tmp/format.json",
+]
+darwin      = [
+    "/tmp/truffleSecrets.json",
+    "/tmp/cloud.json",
+    "/tmp/actionsSecrets.json",
+    "/tmp/contents.json",
+    "/tmp/environment.json",
+    "/tmp/format.json",
+]
+windows     = [
+    '%TEMP%\truffleSecrets.json',
+    '%TEMP%\cloud.json',
+    '%TEMP%\actionsSecrets.json',
+    '%TEMP%\contents.json',
+    '%TEMP%\environment.json',
+    '%TEMP%\format.json',
+]
+
+# ── IOC: Phantom dependencies ───────────────────────────────────
+[ioc.phantom_deps]
+names = []
+
+# ── IOC: Kubernetes ──────────────────────────────────────────────
+[ioc.kubernetes]
+pod_patterns = []
+namespace    = ""
+
+# ── IOC: Windows-specific ────────────────────────────────────────
+[ioc.windows]
+registry_keywords = ["sha1hulud", "shai-hulud"]
+schtask_keywords  = ["sha1hulud", "shai-hulud"]
+
+# ── IOC: Persistence keywords ───────────────────────────────────
+# The 2.0 wave introduced gh-token-monitor (LaunchAgent / systemd
+# daemon polling GitHub every 60 s) and the SHA1HULUD self-hosted
+# Actions runner — both detectable as plain-text strings in
+# persistence configs.
+[ioc.persistence_keywords]
+terms = ["gh-token-monitor", "sha1hulud", "shai-hulud", "SHA1HULUD"]
+
+# ── IOC: Git artifacts (anti-worm pre-pass) ─────────────────────
+# Note: the 2.0-specific branch pattern is `add-linter-workflow-<ms>`,
+# which would need branch_name_regexes (not yet supported in the
+# schema). Until that lands, the Dune branch set still catches the
+# campaign because the worm reuses it.
+[ioc.git_artifacts]
+workflow_filenames    = [
+    "shai-hulud-workflow.yml",
+    "shai-hulud-workflow.yaml",
+    "discussion.yaml",
+]
+workflow_name_regexes = ['^formatter_\d+\.ya?ml$']
+branch_names = [
+    "atreides",
+    "cogitor",
+    "fedaykin",
+    "fremen",
+    "futar",
+    "gesserit",
+    "ghola",
+    "harkonnen",
+    "heighliner",
+    "kanly",
+    "kralizec",
+    "lasgun",
+    "laza",
+    "melange",
+    "mentat",
+    "navigator",
+    "ornithopter",
+    "phibian",
+    "powindah",
+    "prana",
+    "prescient",
+    "sandworm",
+    "sardaukar",
+    "sayyadina",
+    "sietch",
+    "siridar",
+    "slig",
+    "stillsuit",
+    "thumper",
+    "tleilaxu",
+]
+commit_author_emails  = ["claude@users.noreply.github.com"]
+repo_descriptions     = [
+    "Sha1-Hulud: The Second Coming",
+    "Shai-Hulud: The Continued Coming",
+]
+
+# ── Remediation ──────────────────────────────────────────────────
+[remediation]
+rotate_secrets  = true
+install_command = "npm install posthog-node@5.14.0"
+
+[remediation.remove_artifacts]
+linux   = [
+    "Delete setup_bun.js and bun_environment.js inside compromised package node_modules/ subtrees",
+    "Remove /tmp/truffleSecrets.json, /tmp/cloud.json, /tmp/actionsSecrets.json, /tmp/contents.json, /tmp/environment.json, /tmp/format.json",
+    "Remove any .github/workflows/discussion.yaml or formatter_<digits>.yml backdoor workflows",
+    "Delete public 'Sha1-Hulud' / 'Shai-Hulud' repositories that appeared under your GitHub account",
+    "Unregister any 'SHA1HULUD' self-hosted Actions runners",
+    "Inspect /etc/sudoers and /etc/sudoers.d/ for unauthorized entries (Docker privilege escalation)",
+]
+darwin  = [
+    "Delete setup_bun.js and bun_environment.js inside compromised package node_modules/ subtrees",
+    "Remove staging .json files under /tmp",
+    "Remove any .github/workflows/discussion.yaml or formatter_<digits>.yml backdoor workflows",
+    "Delete public 'Sha1-Hulud' / 'Shai-Hulud' repositories that appeared under your GitHub account",
+    "Unregister any 'SHA1HULUD' self-hosted Actions runners",
+]
+windows = [
+    "Delete setup_bun.js and bun_environment.js inside compromised package node_modules\\ subtrees",
+    'Remove staging .json files under %TEMP%',
+    "Remove any .github\\workflows\\discussion.yaml or formatter_<digits>.yml backdoor workflows",
+    "Delete public 'Sha1-Hulud' / 'Shai-Hulud' repositories that appeared under your GitHub account",
+    "Unregister any 'SHA1HULUD' self-hosted Actions runners",
+]
+
+[remediation.check_persistence]
+linux   = [
+    "systemctl --user list-units | grep -i gh-token-monitor",
+    "grep -RIl 'gh-token-monitor' ~/.config/systemd/user/ /etc/systemd/system/ 2>/dev/null",
+    "sudo -l   # verify your sudo grants haven't been tampered with",
+    "Audit GitHub Actions secrets, OIDC tokens, and self-hosted runner registrations",
+    "Audit npm publish history for every package owned by affected maintainers",
+]
+darwin  = [
+    "launchctl list | grep -i gh-token-monitor",
+    "ls ~/Library/LaunchAgents/ | grep -i gh-token",
+    "Audit GitHub Actions secrets, OIDC tokens, and self-hosted runner registrations",
+]
+windows = [
+    "schtasks /query | findstr /I gh-token-monitor",
+    "schtasks /query | findstr /I sha1hulud",
+    "Audit GitHub Actions secrets, OIDC tokens, and self-hosted runner registrations",
+]

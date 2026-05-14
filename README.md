@@ -7,8 +7,10 @@ A data-driven scanner that detects indicators of compromise (IOCs) from known **
 | ID | Package | Ecosystem | Compromised Versions | Date |
 |----|---------|-----------|---------------------|------|
 | `shai-hulud-2025-09` | @ctrl/tinycolor (anchor) | npm | 4.1.1, 4.1.2 | 2025-09-15 |
+| `sha1-hulud-2025-11` | posthog-node (anchor) | npm | 4.18.1, 5.11.3, 5.13.3 | 2025-11-24 |
 | `litellm-2026-03` | litellm | PyPI | 1.82.7, 1.82.8 | 2026-03-24 |
 | `axios-2026-03` | axios | npm | 1.14.1, 0.30.4 | 2026-03-31 |
+| `mini-shai-hulud-2026-05` | @tanstack/react-router (anchor) | npm | 1.169.5, 1.169.8 | 2026-05-11 |
 
 > **No guarantees.** This tool searches for known artifacts of specific supply chain compromises. It does **not** guarantee detection of all malicious activity, nor does a clean scan prove your system was unaffected. Attackers may have removed traces, and the tool cannot detect secrets that have already been exfiltrated. Use this scanner as one input in your incident response — not as a definitive verdict.
 
@@ -205,7 +207,23 @@ First successful self-propagating npm worm. ~500 packages compromised across mul
 - **Mechanism:** malicious `bundle.js` injected via npm `postinstall` runs TruffleHog against the build environment, harvests AWS/GCP/Azure/GitHub credentials, exfiltrates them to a `webhook.site` UUID URL, commits a backdoor GitHub Actions workflow under `.github/workflows/shai-hulud-workflow.yml` (and similar names), creates a public repository named `Shai-Hulud` under the victim's GitHub account containing the stolen secrets, then republishes infected versions of every other npm package the compromised maintainer owns.
 - **Branch / commit fingerprints:** dead-drop branches are named after Dune-universe terms (`fremen`, `atreides`, `sandworm`, …); commits are authored as `claude@users.noreply.github.com`.
 
-Later waves — **Sha1-Hulud 2.0** (November 2025, ~800 packages including `posthog-node`, `@postman/tunnel-agent`, `@asyncapi/cli`, `@zapier/zapier-sdk`, `@ensdomains/*`) and **Mini Shai-Hulud** (May 2026, `@tanstack/*` and others) — reused the same playbook with new payloads (`bun_environment.js`, `setup_bun.js`, `router_init.js`), new descriptions (`Sha1-Hulud: The Second Coming`, `Shai-Hulud: Here We Go Again`), and the `gh-token-monitor` LaunchAgent / systemd daemon for host-side persistence. These waves are not yet shipped as separate profiles; their indicators are partially covered by the `shai-hulud-2025-09` profile's `git_artifacts` block (Dune branches, repo descriptions, claude commit author) and its `persistence_keywords` (`gh-token-monitor`, `shai-hulud`).
+### Sha1-Hulud 2.0 npm Worm (November 24, 2025)
+
+Second wave. ~800 npm packages compromised between 04:11 UTC and ~09:30 UTC including `posthog-node` (4.18.1, 5.11.3, 5.13.3), `posthog-js` (1.297.3), `@postman/tunnel-agent` (0.6.5–0.6.7), `@asyncapi/cli` (4.1.2, 4.1.3), `@zapier/zapier-sdk` (0.15.5–0.15.7), and `@ensdomains/*` packages.
+
+- **Payload:** `setup_bun.js` drops a ~10 MB obfuscated `bun_environment.js` that runs TruffleHog against the build environment and exfiltrates the harvested credentials.
+- **Repo descriptions:** `Sha1-Hulud: The Second Coming`, `Shai-Hulud: The Continued Coming`.
+- **Persistence:** `gh-token-monitor` LaunchAgent / systemd daemon (polls GitHub every 60 s) and a self-hosted GitHub Actions runner named `SHA1HULUD`. Also injects entries into `/etc/sudoers` for Docker-based privilege escalation.
+
+### Mini Shai-Hulud npm Worm — TanStack wave (May 11, 2026)
+
+Third documented wave. 84 malicious npm package artifacts published across 42 `@tanstack/*` packages between 19:20 and 19:26 UTC, plus packages from Mistral AI, UiPath, Guardrails AI, and Squawk. First documented npm worm producing validly signed packages with **SLSA Build Level 3 provenance attestations** — the malicious versions were published through the projects' own GitHub Actions release pipelines using hijacked OIDC tokens.
+
+- **Payload:** `router_init.js` embedded in each compromised package drops `tanstack_runner.js`, which reads GitHub Actions runner process memory to extract every secret in scope.
+- **Exfiltration:** typosquat domain `git-tanstack.com`, Session messenger CDN, and GitHub GraphQL dead-drops.
+- **Campaign marker:** the PBKDF2 salt `svksjrhjkcejg` is unique to this wave.
+- **Repo description:** `Shai-Hulud: Here We Go Again`.
+- **Persistence:** `gh-token-monitor` LaunchAgent / systemd daemon — if its token is revoked (40X), the daemon runs `rm -rf ~/`. Additionally installs hooks in Claude Code and VS Code that survive reboots.
 
 ### LiteLLM PyPI Compromise (March 24, 2026)
 
@@ -287,15 +305,32 @@ Instead of a binary clean/compromised verdict, findings are scored into four con
 
 ## Advisories and References
 
-### Shai-Hulud
+### Shai-Hulud — September 2025 wave (`shai-hulud-2025-09`)
 
 | ID | Source |
 |----|--------|
 | CISA Alert (2025-09-23) | [CISA](https://www.cisa.gov/news-events/alerts/2025/09/23/widespread-supply-chain-compromise-impacting-npm-ecosystem) |
 | Unit 42 advisory | [Palo Alto Networks Unit 42](https://unit42.paloaltonetworks.com/npm-supply-chain-attack/) |
-| Microsoft detection guidance (2.0) | [Microsoft Security Blog](https://www.microsoft.com/en-us/security/blog/2025/12/09/shai-hulud-2-0-guidance-for-detecting-investigating-and-defending-against-the-supply-chain-attack/) |
 
-**Research:** [StepSecurity (Sept 2025)](https://www.stepsecurity.io/blog/ctrl-tinycolor-and-40-npm-packages-compromised), [Wiz (Sha1-Hulud 2.0)](https://www.wiz.io/blog/shai-hulud-2-0-ongoing-supply-chain-attack), [StepSecurity (Mini Shai-Hulud / TanStack)](https://www.stepsecurity.io/blog/mini-shai-hulud-is-back-a-self-spreading-supply-chain-attack-hits-the-npm-ecosystem), [Snyk (TanStack)](https://snyk.io/blog/tanstack-npm-packages-compromised/), [Trend Micro](https://www.trendmicro.com/en_us/research/25/i/npm-supply-chain-attack.html)
+**Research:** [StepSecurity (Sept 2025)](https://www.stepsecurity.io/blog/ctrl-tinycolor-and-40-npm-packages-compromised), [Socket (Sept 2025)](https://socket.dev/blog/tinycolor-supply-chain-attack-affects-40-packages), [Trend Micro](https://www.trendmicro.com/en_us/research/25/i/npm-supply-chain-attack.html), [Phoenix Security](https://phoenix.security/npm-shai-hulud-tinycolor-compromise/), [Orca Security](https://orca.security/resources/blog/npm-malware-campaign-tinycolor/)
+
+### Sha1-Hulud 2.0 — November 2025 wave (`sha1-hulud-2025-11`)
+
+| ID | Source |
+|----|--------|
+| GHSA / PostHog disclosure | [PostHog issue #2633](https://github.com/PostHog/posthog-js/issues/2633) |
+| Microsoft detection guidance | [Microsoft Security Blog](https://www.microsoft.com/en-us/security/blog/2025/12/09/shai-hulud-2-0-guidance-for-detecting-investigating-and-defending-against-the-supply-chain-attack/) |
+
+**Research:** [Wiz](https://www.wiz.io/blog/shai-hulud-2-0-ongoing-supply-chain-attack), [Netskope](https://www.netskope.com/blog/shai-hulud-2-0-aggressive-automated-one-of-fastest-spreading-npm-supply-chain-attacks-ever-observed), [PostHog post-mortem](https://posthog.com/blog/nov-24-shai-hulud-attack-post-mortem)
+
+### Mini Shai-Hulud — May 2026 TanStack wave (`mini-shai-hulud-2026-05`)
+
+| ID | Source |
+|----|--------|
+| GHSA-g7cv-rxg3-hmpx | [GitHub Advisory](https://github.com/advisories/GHSA-g7cv-rxg3-hmpx) |
+| TanStack post-mortem | [TanStack blog](https://tanstack.com/blog/npm-supply-chain-compromise-postmortem) |
+
+**Research:** [StepSecurity (TanStack)](https://www.stepsecurity.io/blog/mini-shai-hulud-is-back-a-self-spreading-supply-chain-attack-hits-the-npm-ecosystem), [Snyk (TanStack)](https://snyk.io/blog/tanstack-npm-packages-compromised/), [Wiz (Mini wave)](https://www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised), [Socket (TanStack)](https://socket.dev/blog/tanstack-npm-packages-compromised-mini-shai-hulud-supply-chain-attack), [Aikido](https://www.aikido.dev/blog/mini-shai-hulud-is-back-tanstack-compromised), [Endor Labs (TanStack)](https://www.endorlabs.com/learn/shai-hulud-compromises-the-tanstack-ecosystem-80-packages-compromised), [OpenAI response](https://openai.com/index/our-response-to-the-tanstack-npm-supply-chain-attack/)
 
 ### LiteLLM
 
@@ -324,15 +359,23 @@ Instead of a binary clean/compromised verdict, findings are scored into four con
 | `proxy_server.py` (v1.82.7) | `a0d229be8efcb2f9135e2ad55ba275b76ddcfeb55fa4370e0a522a5bdee0120b` |
 | `sysmon.py` (dropped backdoor) | `6cf223aea68b0e8031ff68251e30b6017a0513fe152e235c26f248ba1e15c92a` |
 | `bundle.js` (Shai-Hulud, Sept 2025 wave) | `46faab8ab153fae6e80e7cca38eab363075bb524edd79e42269217a083628f09` |
+| `bun_environment.js` (Sha1-Hulud 2.0, Nov 2025) | `62ee164b9b306250c1172583f138c9614139264f889fa99614903c12755468d0` |
+| `bun_environment.js` (Sha1-Hulud 2.0, variant) | `f099c5d9ec417d4445a0328ac0ada9cde79fc37410914103ae9c609cbc0ee068` |
+| `bun_environment.js` (Sha1-Hulud 2.0, variant) | `cbb9bc5a8496243e02f3cc080efbe3e4a1430ba0671f2e43a202bf45b05479cd` |
+| `setup_bun.js` (Sha1-Hulud 2.0, Nov 2025) | `a3894003ad1d293ba96d77881ccd2071446dc3f65f434669b49b3da92421901a` |
+| `router_init.js` (Mini Shai-Hulud, May 2026) | `ab4fcadaec49c03278063dd269ea5eef82d24f2124a8e15d7b90f2fa8601266c` |
+| `tanstack_runner.js` (Mini Shai-Hulud, May 2026) | `2ec78d556d696e208927cc503d48e4b5eb56b31abc2870c2ed2e98d6be27fc96` |
 
 ## Project Structure
 
 ```
 scan_supply_chain/
-  threats/                    Threat profile TOML files (user-extensible)
-    shai-hulud-2025-09.toml     Shai-Hulud npm worm (TeamPCP, anchor @ctrl/tinycolor)
-    litellm-2026-03.toml        LiteLLM PyPI compromise
-    axios-2026-03.toml          Axios npm compromise
+  threats/                       Threat profile TOML files (user-extensible)
+    shai-hulud-2025-09.toml        Shai-Hulud npm worm — Sept 2025 wave (anchor @ctrl/tinycolor)
+    sha1-hulud-2025-11.toml        Sha1-Hulud 2.0 — Nov 2025 wave (anchor posthog-node)
+    mini-shai-hulud-2026-05.toml   Mini Shai-Hulud — May 2026 TanStack wave
+    litellm-2026-03.toml           LiteLLM PyPI compromise
+    axios-2026-03.toml             Axios npm compromise
   threat_profile.py      ThreatProfile dataclass + TOML loader
   ecosystem_base.py      EcosystemPlugin protocol + factory
   ecosystem_pypi.py      PyPI: dist-info, METADATA, Python patterns
