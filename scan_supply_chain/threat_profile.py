@@ -352,14 +352,22 @@ def _parse_profile(data: dict) -> ThreatProfile:
 # Built-in threats ship inside the package.
 _BUILTIN_DIR = Path(__file__).resolve().parent / "threats"
 
-# User-local overrides / additions.
-if sys.platform == "win32":
-    _base = os.environ.get("LOCALAPPDATA", "")
-    _USER_DIR = Path(_base) / "scan-supply-chain" / "threats" if _base else None
-else:
-    _xdg = os.environ.get("XDG_CONFIG_HOME", "")
-    _home_config = Path(_xdg) if _xdg else Path.home() / ".config"
-    _USER_DIR = _home_config / "scan-supply-chain" / "threats"
+
+def _user_threat_dir() -> Path | None:
+    """Return the per-user threats directory, resolved lazily.
+
+    Environment variables (``LOCALAPPDATA`` on Windows,
+    ``XDG_CONFIG_HOME`` elsewhere) are read at call time rather than
+    module import so tests that monkeypatch the environment see the
+    override. Returns ``None`` on Windows when ``LOCALAPPDATA`` is
+    unset — there is no sensible fallback for that platform.
+    """
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA", "")
+        return Path(base) / "scan-supply-chain" / "threats" if base else None
+    xdg = os.environ.get("XDG_CONFIG_HOME", "")
+    home_config = Path(xdg) if xdg else Path.home() / ".config"
+    return home_config / "scan-supply-chain" / "threats"
 
 
 def load_threat_file(path: Path) -> ThreatProfile:
@@ -411,8 +419,9 @@ class InvalidThreatProfileError(ValueError):
 def load_all_threats() -> list[ThreatProfile]:
     """Load all threat profiles (built-in + user-local, user overrides built-in)."""
     profiles = _load_from_dir(_BUILTIN_DIR)
-    if _USER_DIR is not None:
-        user_profiles = _load_from_dir(_USER_DIR)
+    user_dir = _user_threat_dir()
+    if user_dir is not None:
+        user_profiles = _load_from_dir(user_dir)
         profiles.update(user_profiles)  # user overrides built-in by id
     return sorted(profiles.values(), key=lambda p: p.date)
 
