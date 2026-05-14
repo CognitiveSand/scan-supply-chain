@@ -22,7 +22,6 @@ operator sees them without drowning real signals.
 
 from __future__ import annotations
 
-import logging
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -31,8 +30,6 @@ from pathlib import Path
 from .git_repo_index import GitRepoSnapshot
 from .models import FindingCategory, ScanResults
 from .threat_profile import ThreatProfile
-
-logger = logging.getLogger(__name__)
 
 # Weight constants — mirror ``models.Confidence`` tiers.
 _WEIGHT_HIGH = 3
@@ -71,8 +68,9 @@ class WormIndicators:
 def aggregate_indicators(threats: Iterable[ThreatProfile]) -> WormIndicators:
     """Union every loaded threat's ``git_artifacts`` block into one set.
 
-    Invalid regexes from a profile are logged and skipped — one bad
-    profile does not break the anti-worm pass for the others.
+    Patterns are already compiled by ``_parse_git_artifacts`` at load
+    time — a malformed profile fails to load and never reaches this
+    function, so no exception handling is needed here.
     """
     workflow_filenames: set[str] = set()
     workflow_regexes: list[re.Pattern[str]] = []
@@ -87,8 +85,8 @@ def aggregate_indicators(threats: Iterable[ThreatProfile]) -> WormIndicators:
         branch_names.update(ga.branch_names)
         commit_emails.update(ga.commit_author_emails)
         repo_descriptions.extend(ga.repo_descriptions)
-        _compile_into(workflow_regexes, ga.workflow_name_regexes, threat.id, "workflow")
-        _compile_into(branch_regexes, ga.branch_name_regexes, threat.id, "branch")
+        workflow_regexes.extend(ga.workflow_name_regexes)
+        branch_regexes.extend(ga.branch_name_regexes)
 
     # Deduplicate repo_descriptions while preserving order
     seen_desc: set[str] = set()
@@ -106,25 +104,6 @@ def aggregate_indicators(threats: Iterable[ThreatProfile]) -> WormIndicators:
         commit_author_emails=frozenset(commit_emails),
         repo_descriptions=tuple(unique_desc),
     )
-
-
-def _compile_into(
-    out: list[re.Pattern[str]],
-    patterns: Iterable[str],
-    threat_id: str,
-    label: str,
-) -> None:
-    """Compile *patterns*, appending valid ones to *out*; log and skip the rest."""
-    for pattern_str in patterns:
-        try:
-            out.append(re.compile(pattern_str))
-        except re.error:
-            logger.warning(
-                "Skipping invalid %s regex in %s: %r",
-                label,
-                threat_id,
-                pattern_str,
-            )
 
 
 @dataclass(frozen=True)

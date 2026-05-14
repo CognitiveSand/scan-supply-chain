@@ -347,31 +347,24 @@ class TestAggregateIndicators:
         )
         assert result.repo_descriptions == ("Shai-Hulud",)
 
-    def test_compiles_workflow_regexes(self):
+    def test_passes_workflow_regexes_through(self):
         threat = make_axios_threat(
             git_artifacts=GitArtifactsIOC(
-                workflow_name_regexes=(r"^formatter_\d+\.ya?ml$",),
+                workflow_name_regexes=(
+                    re.compile(r"^formatter_\d+\.ya?ml$"),
+                ),
             ),
         )
         result = aggregate_indicators([threat])
         assert len(result.workflow_name_regexes) == 1
         assert result.workflow_name_regexes[0].search("formatter_12345.yml")
 
-    def test_invalid_regex_is_skipped(self):
+    def test_passes_branch_regexes_through(self):
         threat = make_axios_threat(
             git_artifacts=GitArtifactsIOC(
-                workflow_name_regexes=(r"[unclosed", r"^ok$"),
-            ),
-        )
-        result = aggregate_indicators([threat])
-        # Only the valid pattern survives.
-        assert len(result.workflow_name_regexes) == 1
-        assert result.workflow_name_regexes[0].search("ok")
-
-    def test_compiles_branch_regexes(self):
-        threat = make_axios_threat(
-            git_artifacts=GitArtifactsIOC(
-                branch_name_regexes=(r"^add-linter-workflow-\d+$",),
+                branch_name_regexes=(
+                    re.compile(r"^add-linter-workflow-\d+$"),
+                ),
             ),
         )
         result = aggregate_indicators([threat])
@@ -379,13 +372,3 @@ class TestAggregateIndicators:
         assert result.branch_name_regexes[0].search(
             "add-linter-workflow-1732456789012"
         )
-
-    def test_invalid_branch_regex_is_skipped(self):
-        threat = make_axios_threat(
-            git_artifacts=GitArtifactsIOC(
-                branch_name_regexes=(r"[unclosed", r"^fremen-\d+$"),
-            ),
-        )
-        result = aggregate_indicators([threat])
-        assert len(result.branch_name_regexes) == 1
-        assert result.branch_name_regexes[0].search("fremen-42")

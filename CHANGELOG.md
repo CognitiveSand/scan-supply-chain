@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+- **Fail loud on malformed threat profiles.** `_load_from_dir` no longer swallows `KeyError` / `tomllib.TOMLDecodeError` / `re.error` from individual profiles. Any broken TOML — missing required field, syntax error, or invalid regex — now raises `InvalidThreatProfileError` with the offending file path and stops the scan. A user who wrote a profile expects it to be active; silently logging at WARNING and continuing was the kind of stealth-failure mode that §8 (Fail Fast, Fail Loud) explicitly warns against.
+- **Regex compilation moved from scan time to load time.** `GitArtifactsIOC.workflow_name_regexes` and `branch_name_regexes` are now `tuple[re.Pattern[str], ...]` (was `tuple[str, ...]`). `_parse_git_artifacts` compiles each pattern; a malformed pattern raises `re.error` with the field name and the offending pattern. The `aggregate_indicators` function no longer needs `_compile_into` or any exception handling — patterns are pre-validated.
+
 ### Added
 - **`branch_name_regexes`** in `[ioc.git_artifacts]` — symmetric to `workflow_name_regexes`. Lets a profile match generated branch names that carry a timestamp or other variable component, e.g. Sha1-Hulud 2.0's `add-linter-workflow-<Date.now()>` dead-drop branches. Matches are deduplicated against the literal `branch_names` set so a branch covered by both forms emits a single finding. The `sha1-hulud-2025-11` profile now uses this to catch the 2.0-specific branch pattern.
 - **Sha1-Hulud 2.0 threat profile** (`sha1-hulud-2025-11`) — November 2025 wave, anchored on `posthog-node` (4.18.1 / 5.11.3 / 5.13.3). Walk-files for `bun_environment.js` (three known SHA-256s) and `setup_bun.js` (one SHA-256). Adds `Sha1-Hulud: The Second Coming` / `Shai-Hulud: The Continued Coming` repo descriptions, `SHA1HULUD` self-hosted-runner keyword, and the Docker-sudoers privilege-escalation check in remediation guidance.

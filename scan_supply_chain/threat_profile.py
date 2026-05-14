@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 import tomllib
 from dataclasses import dataclass, field
@@ -74,12 +75,17 @@ class GitArtifactsIOC:
     Consumed by the anti-worm pre-pass (``anti_worm_scanner``). Threat
     profiles that describe self-propagating campaigns (Shai-Hulud and
     similar) define this block; threats that don't, leave it empty.
+
+    Regex fields are validated and compiled at load time: an invalid
+    pattern raises ``re.error`` from ``load_threat_file`` so the
+    operator sees the malformed indicator immediately, rather than the
+    pattern being silently dropped from the scan.
     """
 
     workflow_filenames: tuple[str, ...] = ()
-    workflow_name_regexes: tuple[str, ...] = ()
+    workflow_name_regexes: tuple[re.Pattern[str], ...] = ()
     branch_names: tuple[str, ...] = ()
-    branch_name_regexes: tuple[str, ...] = ()
+    branch_name_regexes: tuple[re.Pattern[str], ...] = ()
     commit_author_emails: tuple[str, ...] = ()
     repo_descriptions: tuple[str, ...] = ()
 
@@ -176,12 +182,36 @@ def _parse_known_paths(raw_list: list[dict]) -> list[KnownPathIOC]:
     ]
 
 
+def _compile_patterns(raw: list[str], field_name: str) -> tuple[re.Pattern[str], ...]:
+    """Compile a list of regex strings at load time.
+
+    A malformed pattern raises ``re.error`` with a message that names
+    the offending field and pattern so the operator can find it in the
+    TOML file.
+    """
+    compiled: list[re.Pattern[str]] = []
+    for pattern_str in raw:
+        try:
+            compiled.append(re.compile(pattern_str))
+        except re.error as exc:
+            raise re.error(
+                f"invalid pattern in {field_name}: {pattern_str!r} ({exc})"
+            ) from exc
+    return tuple(compiled)
+
+
 def _parse_git_artifacts(raw: dict) -> GitArtifactsIOC:
     return GitArtifactsIOC(
         workflow_filenames=tuple(raw.get("workflow_filenames", [])),
-        workflow_name_regexes=tuple(raw.get("workflow_name_regexes", [])),
+        workflow_name_regexes=_compile_patterns(
+            raw.get("workflow_name_regexes", []),
+            "ioc.git_artifacts.workflow_name_regexes",
+        ),
         branch_names=tuple(raw.get("branch_names", [])),
-        branch_name_regexes=tuple(raw.get("branch_name_regexes", [])),
+        branch_name_regexes=_compile_patterns(
+            raw.get("branch_name_regexes", []),
+            "ioc.git_artifacts.branch_name_regexes",
+        ),
         commit_author_emails=tuple(raw.get("commit_author_emails", [])),
         repo_descriptions=tuple(raw.get("repo_descriptions", [])),
     )
@@ -254,17 +284,37 @@ def load_threat_file(path: Path) -> ThreatProfile:
 
 
 def _load_from_dir(directory: Path) -> dict[str, ThreatProfile]:
-    """Load all .toml profiles from a directory, keyed by threat id."""
+    """Load all .toml profiles from a directory, keyed by threat id.
+
+    A malformed profile raises ``InvalidThreatProfileError`` with the
+    file path — the scanner refuses to start on a broken profile rather
+    than silently skipping it. A user who wrote a profile expects it
+    to be active; if it can't be loaded, they need to know.
+    """
     profiles: dict[str, ThreatProfile] = {}
     if not directory.is_dir():
         return profiles
     for toml_path in sorted(directory.glob("*.toml")):
         try:
             profile = load_threat_file(toml_path)
-            profiles[profile.id] = profile
-        except (KeyError, tomllib.TOMLDecodeError) as exc:
-            logger.warning("Skipping %s: %s", toml_path.name, exc)
+        except (KeyError, tomllib.TOMLDecodeError, re.error) as exc:
+            raise InvalidThreatProfileError(toml_path, exc) from exc
+        profiles[profile.id] = profile
     return profiles
+
+
+class InvalidThreatProfileError(ValueError):
+    """A threat-profile TOML failed to load.
+
+    Wraps the underlying ``KeyError`` / ``tomllib.TOMLDecodeError`` /
+    ``re.error`` with the file path so the operator can locate the bad
+    profile.
+    """
+
+    def __init__(self, path: Path, cause: BaseException) -> None:
+        super().__init__(f"invalid threat profile {path}: {cause}")
+        self.path = path
+        self.__cause__ = cause
 
 
 def load_all_threats() -> list[ThreatProfile]:
