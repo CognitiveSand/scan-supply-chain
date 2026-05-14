@@ -1,0 +1,194 @@
+[threat]
+id          = "shai-hulud-2025-09"
+name        = "Shai-Hulud npm Worm (TeamPCP)"
+date        = "2025-09-15"
+ecosystem   = "npm"
+package     = "@ctrl/tinycolor"
+compromised = ["4.1.1", "4.1.2"]
+safe        = "4.1.0"
+advisory    = "https://www.cisa.gov/news-events/alerts/2025/09/23/widespread-supply-chain-compromise-impacting-npm-ecosystem"
+description = """\
+First successful self-propagating npm worm. Malicious bundle.js \
+injected via postinstall harvests CI/CD secrets with TruffleHog, \
+exfiltrates them to a webhook.site dead-drop, installs a backdoor \
+GitHub Actions workflow under .github/workflows/, creates a public \
+repository named "Shai-Hulud" under the victim's account, and \
+republishes infected versions of every other npm package the \
+compromised maintainer owns. @ctrl/tinycolor (~2M weekly downloads) \
+was the most-cited anchor of the September 2025 wave; ~500 packages \
+total were compromised across multiple maintainers. Later waves \
+(Sha1-Hulud 2.0 in November 2025, Mini Shai-Hulud against TanStack \
+in May 2026) reused the same playbook with new payloads and \
+descriptions — they are intentionally not modelled here, since each \
+deserves its own profile."""
+
+# ── C2 Infrastructure ───────────────────────────────────────────
+# Exfiltration was to a webhook.site UUID URL on shared infrastructure.
+# Listing webhook.site IPs as C2 would false-positive on every legitimate
+# user of the service, so we leave [c2] empty and rely on git-side
+# artifacts + bundle.js hash detection instead.
+[c2]
+domains = []
+ports   = []
+
+[c2.ips]
+
+# ── IOC: Files to walk-search across filesystem ─────────────────
+# bundle.js is hash-verified to keep this from matching every webpack
+# project on the machine.
+[[ioc.walk_files]]
+description = "bundle.js (worm payload, September 2025 wave)"
+filenames   = ["bundle.js"]
+sha256      = [
+    "46faab8ab153fae6e80e7cca38eab363075bb524edd79e42269217a083628f09",
+]
+
+# ── IOC: Known paths (per-platform) ─────────────────────────────
+# The worm dumps harvested-secret staging files prior to exfiltration.
+# These are temp-directory artifacts an incident responder may catch
+# before they are cleaned up.
+[[ioc.known_paths]]
+description = "harvested-secret staging dumps"
+linux       = [
+    "/tmp/truffleSecrets.json",
+    "/tmp/cloud.json",
+    "/tmp/actionsSecrets.json",
+    "/tmp/contents.json",
+    "/tmp/environment.json",
+    "/tmp/format.json",
+]
+darwin      = [
+    "/tmp/truffleSecrets.json",
+    "/tmp/cloud.json",
+    "/tmp/actionsSecrets.json",
+    "/tmp/contents.json",
+    "/tmp/environment.json",
+    "/tmp/format.json",
+]
+windows     = [
+    '%TEMP%\truffleSecrets.json',
+    '%TEMP%\cloud.json',
+    '%TEMP%\actionsSecrets.json',
+    '%TEMP%\contents.json',
+    '%TEMP%\environment.json',
+    '%TEMP%\format.json',
+]
+
+# ── IOC: Phantom dependencies ───────────────────────────────────
+# None documented for this wave — the payload was bundled directly
+# into the compromised package, not injected as a new dependency.
+[ioc.phantom_deps]
+names = []
+
+# ── IOC: Kubernetes ──────────────────────────────────────────────
+[ioc.kubernetes]
+pod_patterns = []
+namespace    = ""
+
+# ── IOC: Windows-specific ────────────────────────────────────────
+[ioc.windows]
+registry_keywords = []
+schtask_keywords  = []
+
+# ── IOC: Persistence keywords ───────────────────────────────────
+# The September 2025 wave's persistence was repo-side (a malicious
+# workflow file under .github/workflows/), caught by the git_artifacts
+# block below. We still seed a couple of host-side keywords because
+# later waves (2.0, Mini) drop the gh-token-monitor daemon under
+# LaunchAgent / systemd, and a partially-infected machine may have
+# both vintages present.
+[ioc.persistence_keywords]
+terms = ["gh-token-monitor", "shai-hulud"]
+
+# ── IOC: Git artifacts (anti-worm pre-pass) ─────────────────────
+# Workflow filenames and repo descriptions are independently
+# HIGH-signal — no legitimate project carries these strings. Branch
+# names and the commit author are LOW alone (the Dune universe is a
+# common theme on personal projects), HIGH when combined with a
+# strong signal at the same repo.
+[ioc.git_artifacts]
+workflow_filenames    = [
+    "shai-hulud-workflow.yml",
+    "shai-hulud-workflow.yaml",
+    "discussion.yaml",
+]
+workflow_name_regexes = ['^formatter_\d+\.ya?ml$']
+branch_names = [
+    "atreides",
+    "cogitor",
+    "fedaykin",
+    "fremen",
+    "futar",
+    "gesserit",
+    "ghola",
+    "harkonnen",
+    "heighliner",
+    "kanly",
+    "kralizec",
+    "lasgun",
+    "laza",
+    "melange",
+    "mentat",
+    "navigator",
+    "ornithopter",
+    "phibian",
+    "powindah",
+    "prana",
+    "prescient",
+    "sandworm",
+    "sardaukar",
+    "sayyadina",
+    "sietch",
+    "siridar",
+    "slig",
+    "stillsuit",
+    "thumper",
+    "tleilaxu",
+]
+commit_author_emails  = ["claude@users.noreply.github.com"]
+repo_descriptions     = [
+    "Shai-Hulud",
+    "Sha1-Hulud",
+]
+
+# ── Remediation ──────────────────────────────────────────────────
+[remediation]
+rotate_secrets  = true
+install_command = "npm install @ctrl/tinycolor@4.1.0"
+
+[remediation.remove_artifacts]
+linux   = [
+    "Delete bundle.js files inside the compromised package's node_modules/ subtree",
+    "Remove /tmp/truffleSecrets.json, /tmp/cloud.json, /tmp/actionsSecrets.json, /tmp/contents.json, /tmp/environment.json, /tmp/format.json",
+    "Remove any .github/workflows/shai-hulud-workflow.yml or discussion.yaml from your repositories",
+    "Delete public 'Shai-Hulud' / 'Sha1-Hulud' repositories that appeared under your GitHub account without your action",
+]
+darwin  = [
+    "Delete bundle.js files inside the compromised package's node_modules/ subtree",
+    "Remove /tmp/truffleSecrets.json and other staging .json files under /tmp",
+    "Remove any .github/workflows/shai-hulud-workflow.yml or discussion.yaml from your repositories",
+    "Delete public 'Shai-Hulud' / 'Sha1-Hulud' repositories that appeared under your GitHub account without your action",
+]
+windows = [
+    "Delete bundle.js files inside the compromised package's node_modules\\ subtree",
+    'Remove %TEMP%\\truffleSecrets.json and other staging .json files under %TEMP%',
+    "Remove any .github\\workflows\\shai-hulud-workflow.yml or discussion.yaml from your repositories",
+    "Delete public 'Shai-Hulud' / 'Sha1-Hulud' repositories that appeared under your GitHub account without your action",
+]
+
+[remediation.check_persistence]
+linux   = [
+    "git -C <repo> log --all --format='%ae' | grep -F 'claude@users.noreply.github.com'",
+    "Audit GitHub Actions secrets and OIDC tokens for unauthorized use",
+    "Audit npm publish history for every package owned by affected maintainers",
+]
+darwin  = [
+    "git -C <repo> log --all --format='%ae' | grep -F 'claude@users.noreply.github.com'",
+    "launchctl list | grep -i gh-token-monitor",
+    "Audit GitHub Actions secrets and OIDC tokens for unauthorized use",
+]
+windows = [
+    "git -C <repo> log --all --format=%%ae | findstr /C:\"claude@users.noreply.github.com\"",
+    "schtasks /query | findstr /I shai-hulud",
+    "Audit GitHub Actions secrets and OIDC tokens for unauthorized use",
+]

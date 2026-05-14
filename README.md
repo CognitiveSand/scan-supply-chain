@@ -6,6 +6,7 @@ A data-driven scanner that detects indicators of compromise (IOCs) from known **
 
 | ID | Package | Ecosystem | Compromised Versions | Date |
 |----|---------|-----------|---------------------|------|
+| `shai-hulud-2025-09` | @ctrl/tinycolor (anchor) | npm | 4.1.1, 4.1.2 | 2025-09-15 |
 | `litellm-2026-03` | litellm | PyPI | 1.82.7, 1.82.8 | 2026-03-24 |
 | `axios-2026-03` | axios | npm | 1.14.1, 0.30.4 | 2026-03-31 |
 
@@ -196,6 +197,16 @@ This scanner was inspired by [Fahd Mirza's video](https://www.youtube.com/watch?
 
 ## Known Attacks
 
+### Shai-Hulud npm Worm (September 2025, TeamPCP)
+
+First successful self-propagating npm worm. ~500 packages compromised across multiple maintainers; `@ctrl/tinycolor` (~2M weekly downloads) was the most-cited anchor of the original wave.
+
+- **Compromised versions:** `@ctrl/tinycolor@4.1.1` and `4.1.2` (others affected vary by maintainer).
+- **Mechanism:** malicious `bundle.js` injected via npm `postinstall` runs TruffleHog against the build environment, harvests AWS/GCP/Azure/GitHub credentials, exfiltrates them to a `webhook.site` UUID URL, commits a backdoor GitHub Actions workflow under `.github/workflows/shai-hulud-workflow.yml` (and similar names), creates a public repository named `Shai-Hulud` under the victim's GitHub account containing the stolen secrets, then republishes infected versions of every other npm package the compromised maintainer owns.
+- **Branch / commit fingerprints:** dead-drop branches are named after Dune-universe terms (`fremen`, `atreides`, `sandworm`, …); commits are authored as `claude@users.noreply.github.com`.
+
+Later waves — **Sha1-Hulud 2.0** (November 2025, ~800 packages including `posthog-node`, `@postman/tunnel-agent`, `@asyncapi/cli`, `@zapier/zapier-sdk`, `@ensdomains/*`) and **Mini Shai-Hulud** (May 2026, `@tanstack/*` and others) — reused the same playbook with new payloads (`bun_environment.js`, `setup_bun.js`, `router_init.js`), new descriptions (`Sha1-Hulud: The Second Coming`, `Shai-Hulud: Here We Go Again`), and the `gh-token-monitor` LaunchAgent / systemd daemon for host-side persistence. These waves are not yet shipped as separate profiles; their indicators are partially covered by the `shai-hulud-2025-09` profile's `git_artifacts` block (Dune branches, repo descriptions, claude commit author) and its `persistence_keywords` (`gh-token-monitor`, `shai-hulud`).
+
 ### LiteLLM PyPI Compromise (March 24, 2026)
 
 Two backdoored versions of the `litellm` Python package were published to PyPI:
@@ -276,6 +287,16 @@ Instead of a binary clean/compromised verdict, findings are scored into four con
 
 ## Advisories and References
 
+### Shai-Hulud
+
+| ID | Source |
+|----|--------|
+| CISA Alert (2025-09-23) | [CISA](https://www.cisa.gov/news-events/alerts/2025/09/23/widespread-supply-chain-compromise-impacting-npm-ecosystem) |
+| Unit 42 advisory | [Palo Alto Networks Unit 42](https://unit42.paloaltonetworks.com/npm-supply-chain-attack/) |
+| Microsoft detection guidance (2.0) | [Microsoft Security Blog](https://www.microsoft.com/en-us/security/blog/2025/12/09/shai-hulud-2-0-guidance-for-detecting-investigating-and-defending-against-the-supply-chain-attack/) |
+
+**Research:** [StepSecurity (Sept 2025)](https://www.stepsecurity.io/blog/ctrl-tinycolor-and-40-npm-packages-compromised), [Wiz (Sha1-Hulud 2.0)](https://www.wiz.io/blog/shai-hulud-2-0-ongoing-supply-chain-attack), [StepSecurity (Mini Shai-Hulud / TanStack)](https://www.stepsecurity.io/blog/mini-shai-hulud-is-back-a-self-spreading-supply-chain-attack-hits-the-npm-ecosystem), [Snyk (TanStack)](https://snyk.io/blog/tanstack-npm-packages-compromised/), [Trend Micro](https://www.trendmicro.com/en_us/research/25/i/npm-supply-chain-attack.html)
+
 ### LiteLLM
 
 | ID | Source |
@@ -302,14 +323,16 @@ Instead of a binary clean/compromised verdict, findings are scored into four con
 | `litellm_init.pth` (v1.82.8) | `71e35aef03099cd1f2d6446734273025a163597de93912df321ef118bf135238` |
 | `proxy_server.py` (v1.82.7) | `a0d229be8efcb2f9135e2ad55ba275b76ddcfeb55fa4370e0a522a5bdee0120b` |
 | `sysmon.py` (dropped backdoor) | `6cf223aea68b0e8031ff68251e30b6017a0513fe152e235c26f248ba1e15c92a` |
+| `bundle.js` (Shai-Hulud, Sept 2025 wave) | `46faab8ab153fae6e80e7cca38eab363075bb524edd79e42269217a083628f09` |
 
 ## Project Structure
 
 ```
 scan_supply_chain/
-  threats/               Threat profile TOML files (user-extensible)
-    litellm-2026-03.toml   LiteLLM PyPI compromise
-    axios-2026-03.toml     Axios npm compromise
+  threats/                    Threat profile TOML files (user-extensible)
+    shai-hulud-2025-09.toml     Shai-Hulud npm worm (TeamPCP, anchor @ctrl/tinycolor)
+    litellm-2026-03.toml        LiteLLM PyPI compromise
+    axios-2026-03.toml          Axios npm compromise
   threat_profile.py      ThreatProfile dataclass + TOML loader
   ecosystem_base.py      EcosystemPlugin protocol + factory
   ecosystem_pypi.py      PyPI: dist-info, METADATA, Python patterns
