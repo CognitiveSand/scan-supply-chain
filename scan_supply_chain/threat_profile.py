@@ -109,6 +109,7 @@ class ThreatProfile:
     phantom_deps: list[str] = field(default_factory=list)
     kubernetes: KubernetesIOC = field(default_factory=KubernetesIOC)
     windows_ioc: WindowsIOC = field(default_factory=WindowsIOC)
+    persistence_keywords: tuple[str, ...] = ()
     remediation: RemediationInfo = field(default_factory=RemediationInfo)
 
 
@@ -181,6 +182,9 @@ def _parse_profile(data: dict) -> ThreatProfile:
         windows_ioc=WindowsIOC(
             registry_keywords=ioc.get("windows", {}).get("registry_keywords", []),
             schtask_keywords=ioc.get("windows", {}).get("schtask_keywords", []),
+        ),
+        persistence_keywords=tuple(
+            ioc.get("persistence_keywords", {}).get("terms", [])
         ),
         remediation=_parse_remediation(data.get("remediation", {})),
     )

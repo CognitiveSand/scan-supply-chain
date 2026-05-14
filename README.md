@@ -157,6 +157,12 @@ namespace    = ""
 registry_keywords = []
 schtask_keywords  = []
 
+[ioc.persistence_keywords]
+# Extra terms to match in crontab, shell rc, systemd/LaunchAgents/XDG
+# autostart entries — useful for daemons whose name does not contain the
+# package name (e.g. a standalone helper installed by the payload).
+terms = []
+
 [remediation]
 rotate_secrets  = true
 install_command = "pip install mypackage==1.0.0"

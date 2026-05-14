@@ -309,6 +309,6 @@ def scan_iocs(
     from .history_scanner import scan_history
     from .persistence_scanner import scan_persistence
 
-    scan_persistence(results, threat.package)
+    scan_persistence(results, threat.package, threat.persistence_keywords)
     scan_caches(results, threat.package, threat.ecosystem)
     scan_history(results, threat.package, threat.ecosystem)

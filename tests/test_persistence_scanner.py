@@ -10,6 +10,7 @@ from scan_supply_chain.persistence_scanner import (
     _check_crontab,
     _check_shell_rc,
     _check_tmp_scripts,
+    scan_persistence,
 )
 
 
@@ -26,7 +27,7 @@ class TestCheckCrontab:
         )
 
         results = ScanResults()
-        _check_crontab(results, "litellm")
+        _check_crontab(results, ["litellm"])
 
         assert len(results.findings) == 1
         assert "crontab" in results.findings[0].description
@@ -40,7 +41,7 @@ class TestCheckCrontab:
         )
 
         results = ScanResults()
-        _check_crontab(results, "litellm")
+        _check_crontab(results, ["litellm"])
 
         assert results.findings == []
 
@@ -52,7 +53,7 @@ class TestCheckCrontab:
         )
 
         results = ScanResults()
-        _check_crontab(results, "litellm")
+        _check_crontab(results, ["litellm"])
 
         assert results.findings == []
 
@@ -62,7 +63,7 @@ class TestCheckCrontab:
         mock_run_safe(monkeypatch, "persistence_scanner", None)
 
         results = ScanResults()
-        _check_crontab(results, "litellm")
+        _check_crontab(results, ["litellm"])
 
         assert results.findings == []
 
@@ -79,7 +80,7 @@ class TestCheckShellRc:
         (tmp_path / ".bashrc").write_text("alias ll='ls -la'\nexport LITELLM_KEY=abc\n")
 
         results = ScanResults()
-        _check_shell_rc(results, "LITELLM")
+        _check_shell_rc(results, ["LITELLM"])
 
         assert len(results.findings) == 1
 
@@ -91,7 +92,7 @@ class TestCheckShellRc:
         (tmp_path / ".bashrc").write_text("alias ll='ls -la'\nexport PATH=$PATH\n")
 
         results = ScanResults()
-        _check_shell_rc(results, "litellm")
+        _check_shell_rc(results, ["litellm"])
 
         assert results.findings == []
 
@@ -109,7 +110,7 @@ class TestCheckConfigDir:
         )
 
         results = ScanResults()
-        _check_config_dir(results, config_dir, "*.service", "systemd", "litellm")
+        _check_config_dir(results, config_dir, "*.service", "systemd", ["litellm"])
 
         assert len(results.findings) == 1
         assert "systemd" in results.findings[0].description
@@ -123,7 +124,7 @@ class TestCheckConfigDir:
         )
 
         results = ScanResults()
-        _check_config_dir(results, config_dir, "*.service", "systemd", "litellm")
+        _check_config_dir(results, config_dir, "*.service", "systemd", ["litellm"])
 
         assert results.findings == []
 
@@ -136,7 +137,9 @@ class TestCheckConfigDir:
         )
 
         results = ScanResults()
-        _check_config_dir(results, autostart, "*.desktop", "XDG autostart", "litellm")
+        _check_config_dir(
+            results, autostart, "*.desktop", "XDG autostart", ["litellm"]
+        )
 
         assert results.findings == []
 
@@ -149,7 +152,9 @@ class TestCheckConfigDir:
         )
 
         results = ScanResults()
-        _check_config_dir(results, autostart, "*.desktop", "XDG autostart", "litellm")
+        _check_config_dir(
+            results, autostart, "*.desktop", "XDG autostart", ["litellm"]
+        )
 
         assert len(results.findings) == 1
 
@@ -157,10 +162,33 @@ class TestCheckConfigDir:
         # @req FR-41 NFR-03
         results = ScanResults()
         _check_config_dir(
-            results, tmp_path / "nonexistent", "*.service", "test", "litellm"
+            results, tmp_path / "nonexistent", "*.service", "test", ["litellm"]
         )
 
         assert results.findings == []
+
+    def test_matches_non_package_keyword(self, tmp_path):
+        # @req FR-41
+        # Persistence keyword (e.g. a daemon name) unrelated to the package
+        # itself must still trigger a finding.
+        config_dir = tmp_path / "systemd" / "user"
+        config_dir.mkdir(parents=True)
+        (config_dir / "monitor.service").write_text(
+            "[Service]\nExecStart=/usr/local/bin/gh-token-monitor\n"
+        )
+
+        results = ScanResults()
+        # Anchor package "axios" is NOT in the file; keyword is.
+        _check_config_dir(
+            results,
+            config_dir,
+            "*.service",
+            "systemd user service",
+            ["axios", "gh-token-monitor"],
+        )
+
+        assert len(results.findings) == 1
+        assert "gh-token-monitor" in results.findings[0].description
 
 
 # ── _check_tmp_scripts (AST-verified) ───────────────────────────────
@@ -213,3 +241,38 @@ class TestCheckTmpScripts:
         _check_tmp_scripts(results, "litellm")
 
         assert results.findings == []
+
+
+# ── scan_persistence (public API) ───────────────────────────────────
+
+
+class TestScanPersistencePublicAPI:
+    def test_extra_keywords_propagate_to_shell_rc(self, tmp_path, monkeypatch):
+        # @req FR-41
+        # Verify that profile-level persistence_keywords reach the
+        # shell-rc checker even when the package name itself is absent.
+        monkeypatch.setattr(
+            "scan_supply_chain.persistence_scanner.Path.home", lambda: tmp_path
+        )
+        # Suppress crontab and /tmp checks.
+        monkeypatch.setattr(
+            "scan_supply_chain.persistence_scanner.shutil.which", lambda cmd: None
+        )
+        monkeypatch.setattr(
+            "scan_supply_chain.persistence_scanner._check_tmp_scripts",
+            lambda *a, **kw: None,
+        )
+
+        (tmp_path / ".bashrc").write_text(
+            "# nothing about the package\n"
+            "export PATH=/usr/local/bin/gh-token-monitor:$PATH\n"
+        )
+
+        results = ScanResults()
+        scan_persistence(
+            results, package="axios", extra_keywords=("gh-token-monitor",)
+        )
+
+        assert any(
+            "gh-token-monitor" in f.description for f in results.findings
+        )

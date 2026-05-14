@@ -2,7 +2,13 @@
 
 Checks common persistence mechanisms that any supply chain attack
 might abuse, independent of the specific threat profile.
-Every checker filters by the target package name — no generic noise.
+
+Most checkers filter by a list of search terms — typically the target
+package name plus any profile-supplied persistence keywords (e.g. names
+of standalone daemons that the payload installs but that don't carry
+the package name itself). The /tmp Python check is an exception: it
+remains anchored to the package name because it relies on AST import
+matching, which has no meaning for arbitrary keywords.
 """
 
 from __future__ import annotations
@@ -10,6 +16,7 @@ from __future__ import annotations
 import logging
 import shutil
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 from .config import read_if_contains
@@ -19,12 +26,17 @@ from .subprocess_utils import run_safe
 logger = logging.getLogger(__name__)
 
 
-def scan_persistence(results: ScanResults, package: str) -> None:
-    """Scan common persistence locations for package references."""
+def scan_persistence(
+    results: ScanResults,
+    package: str,
+    extra_keywords: Sequence[str] = (),
+) -> None:
+    """Scan common persistence locations for package or keyword references."""
+    search_terms: list[str] = [package, *extra_keywords]
     with scanner_check(results, "generic persistence locations",
                        "No suspicious persistence found"):
-        _check_crontab(results, package)
-        _check_shell_rc(results, package)
+        _check_crontab(results, search_terms)
+        _check_shell_rc(results, search_terms)
         _check_tmp_scripts(results, package)
 
         if sys.platform == "linux":
@@ -33,14 +45,14 @@ def scan_persistence(results: ScanResults, package: str) -> None:
                 Path.home() / ".config" / "systemd" / "user",
                 "*.service",
                 "systemd user service",
-                package,
+                search_terms,
             )
             _check_config_dir(
                 results,
                 Path.home() / ".config" / "autostart",
                 "*.desktop",
                 "XDG autostart",
-                package,
+                search_terms,
             )
         elif sys.platform == "darwin":
             _check_config_dir(
@@ -48,11 +60,19 @@ def scan_persistence(results: ScanResults, package: str) -> None:
                 Path.home() / "Library" / "LaunchAgents",
                 "*.plist",
                 "LaunchAgent",
-                package,
+                search_terms,
             )
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────
+
+
+def _matched_term(text: str, terms: Sequence[str]) -> str | None:
+    """Return the first search term present in `text`, or None."""
+    for term in terms:
+        if term and term in text:
+            return term
+    return None
 
 
 def _check_config_dir(
@@ -60,18 +80,19 @@ def _check_config_dir(
     directory: Path,
     glob_pattern: str,
     label: str,
-    package: str,
+    search_terms: Sequence[str],
 ) -> None:
-    """Glob a config directory for files mentioning the package."""
+    """Glob a config directory for files mentioning any search term."""
     if not directory.is_dir():
         return
     try:
         for config_file in directory.glob(glob_pattern):
             text = config_file.read_text(errors="ignore")
-            if package in text:
+            matched = _matched_term(text, search_terms)
+            if matched is not None:
                 results.add_finding(
                     FindingCategory.PERSISTENCE,
-                    f"{label}: {config_file.name}",
+                    f"{label}: {config_file.name} mentions {matched}",
                     str(config_file),
                     2,
                 )
@@ -82,14 +103,17 @@ def _check_config_dir(
 # ── Individual checkers ─────────────────────────────────────────────────
 
 
-def _check_crontab(results: ScanResults, package: str) -> None:
+def _check_crontab(results: ScanResults, search_terms: Sequence[str]) -> None:
     if not shutil.which("crontab"):
         return
     output = run_safe(["crontab", "-l"])
     if output is None:
         return
     for line in output.splitlines():
-        if package in line and not line.strip().startswith("#"):
+        if line.strip().startswith("#"):
+            continue
+        matched = _matched_term(line, search_terms)
+        if matched is not None:
             results.add_finding(
                 FindingCategory.PERSISTENCE,
                 f"crontab: {line.strip()}",
@@ -98,7 +122,7 @@ def _check_crontab(results: ScanResults, package: str) -> None:
             )
 
 
-def _check_shell_rc(results: ScanResults, package: str) -> None:
+def _check_shell_rc(results: ScanResults, search_terms: Sequence[str]) -> None:
     home = Path.home()
     for rc_name in (".bashrc", ".zshrc", ".profile", ".bash_profile"):
         rc_path = home / rc_name
@@ -107,10 +131,13 @@ def _check_shell_rc(results: ScanResults, package: str) -> None:
         try:
             text = rc_path.read_text(errors="ignore")
             for i, line in enumerate(text.splitlines(), 1):
-                if package in line and not line.strip().startswith("#"):
+                if line.strip().startswith("#"):
+                    continue
+                matched = _matched_term(line, search_terms)
+                if matched is not None:
                     results.add_finding(
                         FindingCategory.PERSISTENCE,
-                        f"{rc_name}:{i} mentions {package}",
+                        f"{rc_name}:{i} mentions {matched}",
                         str(rc_path),
                         2,
                     )
@@ -119,7 +146,11 @@ def _check_shell_rc(results: ScanResults, package: str) -> None:
 
 
 def _check_tmp_scripts(results: ScanResults, package: str) -> None:
-    """Check /tmp for scripts that actually import the package."""
+    """Check /tmp for scripts that actually import the package.
+
+    Stays anchored to the package name — AST import matching has no
+    meaning for arbitrary keywords.
+    """
     tmp = Path("/tmp") if sys.platform != "win32" else None
     if tmp is None or not tmp.is_dir():
         return
