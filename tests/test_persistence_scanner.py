@@ -4,6 +4,7 @@ Module under test: scan_supply_chain.persistence_scanner
 """
 
 from scan_supply_chain.models import ScanResults
+from scan_supply_chain.skip_report import SkipReport
 from tests.conftest import mock_run_safe, mock_tool_available
 from scan_supply_chain.persistence_scanner import (
     _check_config_dir,
@@ -80,7 +81,7 @@ class TestCheckShellRc:
         (tmp_path / ".bashrc").write_text("alias ll='ls -la'\nexport LITELLM_KEY=abc\n")
 
         results = ScanResults()
-        _check_shell_rc(results, ["LITELLM"])
+        _check_shell_rc(results, ["LITELLM"], SkipReport())
 
         assert len(results.findings) == 1
 
@@ -92,7 +93,7 @@ class TestCheckShellRc:
         (tmp_path / ".bashrc").write_text("alias ll='ls -la'\nexport PATH=$PATH\n")
 
         results = ScanResults()
-        _check_shell_rc(results, ["litellm"])
+        _check_shell_rc(results, ["litellm"], SkipReport())
 
         assert results.findings == []
 
@@ -110,7 +111,9 @@ class TestCheckConfigDir:
         )
 
         results = ScanResults()
-        _check_config_dir(results, config_dir, "*.service", "systemd", ["litellm"])
+        _check_config_dir(
+            results, config_dir, "*.service", "systemd", ["litellm"], SkipReport()
+        )
 
         assert len(results.findings) == 1
         assert "systemd" in results.findings[0].description
@@ -124,7 +127,9 @@ class TestCheckConfigDir:
         )
 
         results = ScanResults()
-        _check_config_dir(results, config_dir, "*.service", "systemd", ["litellm"])
+        _check_config_dir(
+            results, config_dir, "*.service", "systemd", ["litellm"], SkipReport()
+        )
 
         assert results.findings == []
 
@@ -138,7 +143,7 @@ class TestCheckConfigDir:
 
         results = ScanResults()
         _check_config_dir(
-            results, autostart, "*.desktop", "XDG autostart", ["litellm"]
+            results, autostart, "*.desktop", "XDG autostart", ["litellm"], SkipReport()
         )
 
         assert results.findings == []
@@ -153,7 +158,7 @@ class TestCheckConfigDir:
 
         results = ScanResults()
         _check_config_dir(
-            results, autostart, "*.desktop", "XDG autostart", ["litellm"]
+            results, autostart, "*.desktop", "XDG autostart", ["litellm"], SkipReport()
         )
 
         assert len(results.findings) == 1
@@ -162,7 +167,12 @@ class TestCheckConfigDir:
         # @req FR-41 NFR-03
         results = ScanResults()
         _check_config_dir(
-            results, tmp_path / "nonexistent", "*.service", "test", ["litellm"]
+            results,
+            tmp_path / "nonexistent",
+            "*.service",
+            "test",
+            ["litellm"],
+            SkipReport(),
         )
 
         assert results.findings == []
@@ -185,6 +195,7 @@ class TestCheckConfigDir:
             "*.service",
             "systemd user service",
             ["axios", "gh-token-monitor"],
+            SkipReport(),
         )
 
         assert len(results.findings) == 1

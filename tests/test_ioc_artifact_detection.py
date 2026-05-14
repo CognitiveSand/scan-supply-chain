@@ -15,6 +15,7 @@ from scan_supply_chain.ioc_scanner import (
     _scan_walk_files,
 )
 from scan_supply_chain.models import ScanResults
+from scan_supply_chain.skip_report import SkipReport
 from tests.conftest import (
     StubEcosystem,
     StubPolicy,
@@ -41,7 +42,7 @@ class TestCheckKnownPaths:
         ioc_file.write_text("exfil data")
 
         results = ScanResults()
-        _check_known_paths("test artifacts", [ioc_file], results)
+        _check_known_paths("test artifacts", [ioc_file], results, SkipReport())
 
         assert len(results.iocs) == 1
         assert str(ioc_file) in results.iocs[0]
@@ -49,7 +50,9 @@ class TestCheckKnownPaths:
     def test_reports_clean_when_no_paths_exist(self, tmp_path, capsys):
         # @req FR-12
         results = ScanResults()
-        _check_known_paths("test artifacts", [tmp_path / "nope"], results)
+        _check_known_paths(
+            "test artifacts", [tmp_path / "nope"], results, SkipReport()
+        )
 
         assert results.iocs == []
         captured = capsys.readouterr().out
@@ -65,6 +68,7 @@ class TestCheckKnownPaths:
             "test",
             [tmp_path / "pglog", tmp_path / ".pg_state"],
             results,
+            SkipReport(),
         )
 
         assert len(results.iocs) == 2
@@ -77,7 +81,7 @@ class TestCheckKnownPaths:
         monkeypatch.setattr(Path, "exists", exists_raises)
 
         results = ScanResults()
-        _check_known_paths("test", [Path("/fake/path")], results)
+        _check_known_paths("test", [Path("/fake/path")], results, SkipReport())
 
         assert results.iocs == []
 

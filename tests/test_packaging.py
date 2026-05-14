@@ -34,17 +34,17 @@ class TestEntryPoints:
 
 class TestEcosystemCache:
     def test_pypi_returns_same_instance(self):
-        from scan_supply_chain.ecosystem_base import _ecosystem_cache, get_ecosystem
+        from scan_supply_chain.ecosystem_base import get_ecosystem
 
-        _ecosystem_cache.clear()
+        get_ecosystem.cache_clear()
         first = get_ecosystem("pypi")
         second = get_ecosystem("pypi")
         assert first is second
 
     def test_npm_returns_same_instance(self):
-        from scan_supply_chain.ecosystem_base import _ecosystem_cache, get_ecosystem
+        from scan_supply_chain.ecosystem_base import get_ecosystem
 
-        _ecosystem_cache.clear()
+        get_ecosystem.cache_clear()
         first = get_ecosystem("npm")
         second = get_ecosystem("npm")
         assert first is second

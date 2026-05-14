@@ -85,7 +85,7 @@ class StubEcosystem:
     def extra_search_roots(self):
         return []
 
-    def find_phantom_deps(self, names, roots):
+    def find_phantom_deps(self, names, roots, skip_report):
         return []
 
 
@@ -327,21 +327,6 @@ def fake_home(tmp_path, monkeypatch):
     ):
         monkeypatch.setattr(f"scan_supply_chain.{mod}.Path.home", lambda: tmp_path)
     return tmp_path
-
-
-@pytest.fixture(autouse=True)
-def _reset_skip_report():
-    """Reset the per-scan skip-report singleton before every test.
-
-    The skip-report accumulates filesystem permission / read errors
-    encountered by the walker and reader helpers. Tests that don't
-    care must not see leakage from earlier tests.
-    """
-    from scan_supply_chain.skip_report import reset_current_report
-
-    reset_current_report()
-    yield
-    reset_current_report()
 
 
 @pytest.fixture

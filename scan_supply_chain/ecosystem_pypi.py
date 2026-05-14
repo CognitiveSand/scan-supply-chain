@@ -105,6 +105,7 @@ class PyPIPlugin:
         self,
         names: list[str],
         search_roots: list[str],
+        skip_report,
     ) -> list[str]:
         """Check for phantom PyPI packages in site-packages."""
         if not names:
@@ -115,7 +116,9 @@ class PyPIPlugin:
             if not root_path.is_dir():
                 continue
             try:
-                for dirpath, dirnames, _ in _walk_site_packages(root_path):
+                for dirpath, dirnames, _ in _walk_site_packages(
+                    root_path, skip_report
+                ):
                     for name in names:
                         pattern = re.compile(
                             rf"^{re.escape(name)}-[^/\\]+\.(dist-info|egg-info)$"
@@ -125,14 +128,16 @@ class PyPIPlugin:
                                 full = Path(dirpath) / d
                                 found.append(f"phantom:{name} at {full}")
             except PermissionError:
-                logger.debug("Permission denied walking %s", root)
+                skip_report.record_permission(root_path)
         return found
 
 
-def _walk_site_packages(root: Path):
+def _walk_site_packages(root: Path, skip_report):
     """Walk looking for site-packages, then check contents."""
     from .config import PHANTOM_WALK_SKIP_DIRS, pruned_walk
 
-    for dirpath, dirnames, filenames in pruned_walk(root, PHANTOM_WALK_SKIP_DIRS):
+    for dirpath, dirnames, filenames in pruned_walk(
+        root, PHANTOM_WALK_SKIP_DIRS, skip_report
+    ):
         if Path(dirpath).name == "site-packages":
             yield dirpath, dirnames, filenames

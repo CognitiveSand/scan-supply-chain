@@ -22,7 +22,6 @@ from .formatting import (
     print_ioc_found,
 )
 from .models import ScanResults
-from .skip_report import note_permission_error, note_read_error
 
 if TYPE_CHECKING:
     from .scan_context import ScanContext
@@ -43,6 +42,7 @@ def _check_known_paths(
     description: str,
     paths: Iterable[Path],
     results: ScanResults,
+    skip_report,
 ) -> None:
     """Check a list of known paths for IOC artifacts."""
     print_check_header(description)
@@ -54,7 +54,7 @@ def _check_known_paths(
                 results.iocs.append(str(path))
                 found = True
         except PermissionError:
-            note_permission_error(path)
+            skip_report.record_permission(path)
     if not found:
         print_clean()
 
@@ -74,7 +74,9 @@ def _scan_walk_files(results: ScanResults, ctx: ScanContext) -> None:
             root_path = Path(root)
             if not root_path.is_dir():
                 continue
-            for dirpath, _, filenames in pruned_walk(root_path, IOC_WALK_SKIP_DIRS):
+            for dirpath, _, filenames in pruned_walk(
+                root_path, IOC_WALK_SKIP_DIRS, ctx.skip_report
+            ):
                 for fn in filenames:
                     if fn not in target_names:
                         continue
@@ -90,9 +92,11 @@ def _scan_walk_files(results: ScanResults, ctx: ScanContext) -> None:
                             # but record the path for the post-scan
                             # summary so the operator knows why no hash
                             # comparison happened.
-                            note_permission_error(file_path)
+                            ctx.skip_report.record_permission(file_path)
                         except OSError as exc:
-                            note_read_error(file_path, type(exc).__name__)
+                            ctx.skip_report.record_read_error(
+                                file_path, type(exc).__name__
+                            )
                     print_ioc_found(str(file_path))
                     results.iocs.append(str(file_path))
                     found = True
@@ -104,7 +108,7 @@ def _scan_known_paths(results: ScanResults, ctx: ScanContext) -> None:
     """Check per-platform known paths from the threat profile."""
     for kp in ctx.threat.known_paths:
         paths = [_expand_path(p) for p in kp.paths_for_platform()]
-        _check_known_paths(kp.description, paths, results)
+        _check_known_paths(kp.description, paths, results, ctx.skip_report)
 
 
 def _resolve_c2_ips(ctx: ScanContext) -> dict[str, list[str]]:
@@ -239,6 +243,7 @@ def _scan_phantom_deps(results: ScanResults, ctx: ScanContext) -> None:
     found_iocs = ctx.ecosystem.find_phantom_deps(
         ctx.threat.phantom_deps,
         ctx.roots,
+        ctx.skip_report,
     )
     if found_iocs:
         for ioc in found_iocs:
@@ -291,6 +296,8 @@ def scan_iocs(results: ScanResults, ctx: ScanContext) -> None:
     from .history_scanner import scan_history
     from .persistence_scanner import scan_persistence
 
-    scan_persistence(results, threat.package, threat.persistence_keywords)
+    scan_persistence(
+        results, threat.package, threat.persistence_keywords, ctx.skip_report
+    )
     scan_caches(results, threat.package, threat.ecosystem)
-    scan_history(results, threat.package, threat.ecosystem)
+    scan_history(results, threat.package, threat.ecosystem, ctx.skip_report)

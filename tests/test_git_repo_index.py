@@ -13,6 +13,7 @@ from scan_supply_chain.git_repo_index import (
     GitRepoSnapshot,
     build_repo_index,
 )
+from scan_supply_chain.skip_report import SkipReport
 
 
 # ── Fixture helpers ─────────────────────────────────────────────────────
@@ -54,13 +55,13 @@ def _make_repo(
 
 class TestBuildRepoIndex:
     def test_returns_empty_when_no_git_dirs(self, tmp_path):
-        assert build_repo_index([str(tmp_path)]) == []
+        assert build_repo_index([str(tmp_path)], SkipReport()) == []
 
     def test_discovers_single_repo(self, tmp_path, monkeypatch):
         _disable_git_log(monkeypatch)
         _make_repo(tmp_path / "proj", description="my project")
 
-        snapshots = build_repo_index([str(tmp_path)])
+        snapshots = build_repo_index([str(tmp_path)], SkipReport())
 
         assert len(snapshots) == 1
         snap = snapshots[0]
@@ -75,7 +76,7 @@ class TestBuildRepoIndex:
             refs_heads={"main": "deadbeef", "feature/fremen": "abc123"},
         )
 
-        [snap] = build_repo_index([str(tmp_path)])
+        [snap] = build_repo_index([str(tmp_path)], SkipReport())
 
         assert "main" in snap.local_branches
         assert "feature/fremen" in snap.local_branches
@@ -91,7 +92,7 @@ class TestBuildRepoIndex:
         )
         _make_repo(tmp_path / "proj", packed_refs=packed)
 
-        [snap] = build_repo_index([str(tmp_path)])
+        [snap] = build_repo_index([str(tmp_path)], SkipReport())
 
         assert "atreides" in snap.local_branches
         assert "main" in snap.local_branches
@@ -110,7 +111,7 @@ class TestBuildRepoIndex:
             },
         )
 
-        [snap] = build_repo_index([str(tmp_path)])
+        [snap] = build_repo_index([str(tmp_path)], SkipReport())
 
         names = {p.name for p in snap.workflow_files}
         assert names == {"ci.yml", "discussion.yaml"}
@@ -122,7 +123,7 @@ class TestBuildRepoIndex:
         nested = tmp_path / "proj" / ".git" / "modules" / "sub" / ".git"
         nested.mkdir(parents=True)
 
-        snapshots = build_repo_index([str(tmp_path)])
+        snapshots = build_repo_index([str(tmp_path)], SkipReport())
 
         assert len(snapshots) == 1
         assert snapshots[0].repo_root.name == "proj"
@@ -136,7 +137,7 @@ class TestBuildRepoIndex:
         except (OSError, NotImplementedError):
             pytest.skip("symlinks not supported on this platform")
 
-        snapshots = build_repo_index([str(tmp_path)])
+        snapshots = build_repo_index([str(tmp_path)], SkipReport())
 
         assert len(snapshots) == 1
 
@@ -146,7 +147,7 @@ class TestBuildRepoIndex:
         _make_repo(tmp_path / "outer")
         _make_repo(tmp_path / "outer" / "node_modules" / "vendor")
 
-        snapshots = build_repo_index([str(tmp_path)])
+        snapshots = build_repo_index([str(tmp_path)], SkipReport())
 
         roots = {s.repo_root.name for s in snapshots}
         assert roots == {"outer"}
@@ -158,7 +159,7 @@ class TestBuildRepoIndex:
         )
         _make_repo(tmp_path / "proj")
 
-        [snap] = build_repo_index([str(tmp_path)])
+        [snap] = build_repo_index([str(tmp_path)], SkipReport())
 
         assert snap.recent_author_emails == ()
 
@@ -179,7 +180,7 @@ class TestBuildRepoIndex:
         )
         _make_repo(tmp_path / "proj")
 
-        [snap] = build_repo_index([str(tmp_path)])
+        [snap] = build_repo_index([str(tmp_path)], SkipReport())
 
         assert snap.recent_author_emails == (
             "alice@example.com",

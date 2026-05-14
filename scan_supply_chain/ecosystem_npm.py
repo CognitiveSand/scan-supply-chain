@@ -127,6 +127,7 @@ class NpmPlugin:
         self,
         names: list[str],
         search_roots: list[str],
+        skip_report,
     ) -> list[str]:
         """Check for phantom npm dependencies in node_modules."""
         if not names:
@@ -141,7 +142,7 @@ class NpmPlugin:
             if not root_path.is_dir():
                 continue
             for dirpath, dirnames, filenames in pruned_walk(
-                root_path, PHANTOM_WALK_SKIP_DIRS
+                root_path, PHANTOM_WALK_SKIP_DIRS, skip_report
             ):
                 dp = Path(dirpath)
                 # Only inspect node_modules directories

@@ -31,7 +31,7 @@ from .report import (
     print_source_refs,
 )
 from .search_roots import build_search_roots, deduplicate_roots
-from .skip_report import get_current_report, reset_current_report
+from .skip_report import SkipReport
 from .source_scanner import scan_source_and_configs
 from .threat_profile import (
     ThreatProfile,
@@ -130,7 +130,9 @@ def _scan_single_threat(ctx: ScanContext) -> ScanResults:
 
     # Phase 1: Discover installations
     print_phase_header(1, f"Discovering {threat.package} installations...")
-    metadata_dirs = find_package_metadata(ctx.roots, ctx.ecosystem, threat.package)
+    metadata_dirs = find_package_metadata(
+        ctx.roots, ctx.ecosystem, threat.package, ctx.skip_report
+    )
     print(
         f"  Found {BOLD}{len(metadata_dirs)}{RESET} "
         f"{threat.package} metadata directories"
@@ -181,8 +183,10 @@ def main():
         print("No threat profiles found. Nothing to scan.")
         sys.exit(0)
 
-    # Fresh skip-report for this scan — instrumented helpers append to it.
-    reset_current_report()
+    # Single SkipReport for the whole scan — shared across every threat's
+    # per-threat ScanContext and the anti-worm pre-pass so the post-scan
+    # summary aggregates skips from every filesystem walk.
+    skip_report = SkipReport()
 
     policy = detect_platform()
 
@@ -209,7 +213,7 @@ def main():
     # Anti-worm pre-pass: one filesystem walk across the union of all
     # ecosystem roots, matched against the aggregated worm indicators
     # from every loaded threat profile.
-    anti_worm_results = _run_anti_worm_pass(threats, roots_cache)
+    anti_worm_results = _run_anti_worm_pass(threats, roots_cache, skip_report)
 
     # Run pipeline for each threat
     all_results: list[tuple[ThreatProfile, ScanResults]] = []
@@ -220,6 +224,7 @@ def main():
             policy=policy,
             roots=roots_cache[threat.ecosystem],
             resolve_c2=args.resolve_c2,
+            skip_report=skip_report,
         )
         results = _scan_single_threat(ctx)
         all_results.append((threat, results))
@@ -229,7 +234,7 @@ def main():
     print()
     print_anti_worm_report(anti_worm_results)
     print_multi_threat_summary(all_results)
-    print_skip_summary(get_current_report())
+    print_skip_summary(skip_report)
 
     any_compromised = any(not r.is_clean for _, r in all_results)
     any_worm_signals = not anti_worm_results.is_clean
@@ -239,6 +244,7 @@ def main():
 def _run_anti_worm_pass(
     threats: list[ThreatProfile],
     roots_cache: dict[str, list[str]],
+    skip_report: SkipReport,
 ) -> ScanResults:
     """Run the anti-worm pre-pass and return its findings as a ScanResults.
 
@@ -254,7 +260,7 @@ def _run_anti_worm_pass(
     union_roots = deduplicate_roots(
         [root for roots in roots_cache.values() for root in roots]
     )
-    snapshots = build_repo_index(union_roots)
+    snapshots = build_repo_index(union_roots, skip_report)
     print(
         f"  Scanned {BOLD}{len(snapshots)}{RESET} local git repo(s) "
         f"against {BOLD}{_indicator_count(indicators)}{RESET} worm indicator(s)\n"

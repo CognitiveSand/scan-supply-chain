@@ -14,6 +14,7 @@ from scan_supply_chain.ecosystem_npm import (
     _check_yarn_lock,
 )
 from scan_supply_chain.ecosystem_pypi import PyPIPlugin
+from scan_supply_chain.skip_report import SkipReport
 
 
 # ── npm: package-lock.json structural parsing ────────────────────────
@@ -248,7 +249,7 @@ class TestNpmPhantomDepWalkWithPnpm:
         )
 
         plugin = NpmPlugin()
-        found = plugin.find_phantom_deps(["plain-crypto-js"], [str(tmp_path)])
+        found = plugin.find_phantom_deps(["plain-crypto-js"], [str(tmp_path)], SkipReport())
 
         assert len(found) == 1
         assert "plain-crypto-js" in found[0]
@@ -264,7 +265,7 @@ class TestNpmPhantomDepWalk:
         nm.mkdir(parents=True)
 
         plugin = NpmPlugin()
-        found = plugin.find_phantom_deps(["plain-crypto-js"], [str(tmp_path)])
+        found = plugin.find_phantom_deps(["plain-crypto-js"], [str(tmp_path)], SkipReport())
 
         assert len(found) == 1
         assert "plain-crypto-js" in found[0]
@@ -284,7 +285,7 @@ class TestNpmPhantomDepWalk:
         )
 
         plugin = NpmPlugin()
-        found = plugin.find_phantom_deps(["plain-crypto-js"], [str(tmp_path)])
+        found = plugin.find_phantom_deps(["plain-crypto-js"], [str(tmp_path)], SkipReport())
 
         assert len(found) == 1
         assert "4.2.1" in found[0]
@@ -295,14 +296,14 @@ class TestNpmPhantomDepWalk:
         nm.mkdir(parents=True)
 
         plugin = NpmPlugin()
-        found = plugin.find_phantom_deps(["plain-crypto-js"], [str(tmp_path)])
+        found = plugin.find_phantom_deps(["plain-crypto-js"], [str(tmp_path)], SkipReport())
 
         assert found == []
 
     def test_returns_empty_for_empty_names_list(self, tmp_path):
         # @req FR-17
         plugin = NpmPlugin()
-        found = plugin.find_phantom_deps([], [str(tmp_path)])
+        found = plugin.find_phantom_deps([], [str(tmp_path)], SkipReport())
 
         assert found == []
 
@@ -317,7 +318,7 @@ class TestPyPIPhantomDeps:
         (sp / "evil-pkg-1.0.0.dist-info").mkdir(parents=True)
 
         plugin = PyPIPlugin()
-        found = plugin.find_phantom_deps(["evil-pkg"], [str(tmp_path)])
+        found = plugin.find_phantom_deps(["evil-pkg"], [str(tmp_path)], SkipReport())
 
         assert len(found) == 1
         assert "evil-pkg" in found[0]
@@ -328,7 +329,7 @@ class TestPyPIPhantomDeps:
         (sp / "evil-pkg-1.0.0.egg-info").mkdir(parents=True)
 
         plugin = PyPIPlugin()
-        found = plugin.find_phantom_deps(["evil-pkg"], [str(tmp_path)])
+        found = plugin.find_phantom_deps(["evil-pkg"], [str(tmp_path)], SkipReport())
 
         assert len(found) == 1
         assert "evil-pkg" in found[0]
@@ -339,13 +340,13 @@ class TestPyPIPhantomDeps:
         (sp / "safe-pkg-2.0.0.dist-info").mkdir(parents=True)
 
         plugin = PyPIPlugin()
-        found = plugin.find_phantom_deps(["evil-pkg"], [str(tmp_path)])
+        found = plugin.find_phantom_deps(["evil-pkg"], [str(tmp_path)], SkipReport())
 
         assert found == []
 
     def test_returns_empty_for_empty_names(self, tmp_path):
         # @req FR-18
         plugin = PyPIPlugin()
-        found = plugin.find_phantom_deps([], [str(tmp_path)])
+        found = plugin.find_phantom_deps([], [str(tmp_path)], SkipReport())
 
         assert found == []

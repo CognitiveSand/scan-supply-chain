@@ -10,6 +10,7 @@ from scan_supply_chain.discovery import (
     find_package_metadata,
 )
 from scan_supply_chain.ecosystem_pypi import PyPIPlugin
+from scan_supply_chain.skip_report import SkipReport
 
 
 # ── _walk_for_metadata (PyPI filesystem) ──────────────────────────────
@@ -22,7 +23,7 @@ class TestWalkForMetadata:
         dist_info.mkdir(parents=True)
 
         pattern = PyPIPlugin().metadata_dir_pattern("litellm")
-        result = _walk_for_metadata(tmp_path, pattern, "litellm")
+        result = _walk_for_metadata(tmp_path, pattern, "litellm", SkipReport())
 
         assert len(result) == 1
         assert result[0].name == "litellm-1.82.7.dist-info"
@@ -33,7 +34,7 @@ class TestWalkForMetadata:
         (tmp_path / "venv2" / "lib" / "litellm-1.82.7.dist-info").mkdir(parents=True)
 
         pattern = PyPIPlugin().metadata_dir_pattern("litellm")
-        result = _walk_for_metadata(tmp_path, pattern, "litellm")
+        result = _walk_for_metadata(tmp_path, pattern, "litellm", SkipReport())
 
         assert len(result) == 2
 
@@ -42,7 +43,7 @@ class TestWalkForMetadata:
         (tmp_path / "__pycache__" / "litellm-1.82.7.dist-info").mkdir(parents=True)
 
         pattern = PyPIPlugin().metadata_dir_pattern("litellm")
-        result = _walk_for_metadata(tmp_path, pattern, "litellm")
+        result = _walk_for_metadata(tmp_path, pattern, "litellm", SkipReport())
 
         assert result == []
 
@@ -53,7 +54,7 @@ class TestWalkForMetadata:
         )
 
         pattern = PyPIPlugin().metadata_dir_pattern("litellm")
-        result = _walk_for_metadata(tmp_path, pattern, "litellm")
+        result = _walk_for_metadata(tmp_path, pattern, "litellm", SkipReport())
 
         assert result == []
 
@@ -62,7 +63,7 @@ class TestWalkForMetadata:
         (tmp_path / "litellm-1.80.0.egg-info").mkdir()
 
         pattern = PyPIPlugin().metadata_dir_pattern("litellm")
-        result = _walk_for_metadata(tmp_path, pattern, "litellm")
+        result = _walk_for_metadata(tmp_path, pattern, "litellm", SkipReport())
 
         assert len(result) == 1
         assert result[0].name == "litellm-1.80.0.egg-info"
@@ -75,7 +76,7 @@ class TestWalkForMetadata:
         monkeypatch.setattr("scan_supply_chain.config.os.walk", walk_that_raises)
 
         pattern = PyPIPlugin().metadata_dir_pattern("litellm")
-        result = _walk_for_metadata(tmp_path, pattern, "litellm")
+        result = _walk_for_metadata(tmp_path, pattern, "litellm", SkipReport())
 
         assert result == []
 
@@ -90,7 +91,7 @@ class TestWalkForNodeModules:
         pkg_dir.mkdir(parents=True)
         (pkg_dir / "package.json").write_text('{"version": "1.14.1"}')
 
-        result = _walk_for_node_modules(tmp_path, "axios")
+        result = _walk_for_node_modules(tmp_path, "axios", SkipReport())
 
         assert len(result) == 1
         assert result[0].name == "axios"
@@ -100,7 +101,7 @@ class TestWalkForNodeModules:
         (tmp_path / "node_modules" / "axios").mkdir(parents=True)
         # No package.json
 
-        result = _walk_for_node_modules(tmp_path, "axios")
+        result = _walk_for_node_modules(tmp_path, "axios", SkipReport())
 
         assert result == []
 
@@ -114,7 +115,7 @@ class TestWalkForNodeModules:
         pkg2.mkdir(parents=True)
         (pkg2 / "package.json").write_text('{"version": "1.14.1"}')
 
-        result = _walk_for_node_modules(tmp_path, "axios")
+        result = _walk_for_node_modules(tmp_path, "axios", SkipReport())
 
         assert len(result) == 2
 
@@ -157,7 +158,7 @@ class TestFindPackageMetadata:
         (site_pkg / "litellm-1.82.7.dist-info").mkdir(parents=True)
 
         ecosystem = PyPIPlugin()
-        result = find_package_metadata([str(tmp_path)], ecosystem, "litellm")
+        result = find_package_metadata([str(tmp_path)], ecosystem, "litellm", SkipReport())
 
         assert len(result) == 1
 
@@ -166,7 +167,7 @@ class TestFindPackageMetadata:
         (tmp_path / "lib" / "site-packages" / "flask-3.0.dist-info").mkdir(parents=True)
 
         ecosystem = PyPIPlugin()
-        result = find_package_metadata([str(tmp_path)], ecosystem, "litellm")
+        result = find_package_metadata([str(tmp_path)], ecosystem, "litellm", SkipReport())
 
         assert result == []
 
@@ -176,6 +177,6 @@ class TestFindPackageMetadata:
         (target / "venv" / "lib" / "litellm-1.82.7.dist-info").mkdir(parents=True)
 
         ecosystem = PyPIPlugin()
-        result = find_package_metadata([str(target)], ecosystem, "litellm")
+        result = find_package_metadata([str(target)], ecosystem, "litellm", SkipReport())
 
         assert len(result) == 1

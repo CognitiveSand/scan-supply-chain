@@ -127,7 +127,7 @@ def scan_source_and_configs(results: ScanResults, ctx: ScanContext) -> int:
         if not root_path.is_dir():
             continue
         for dirpath, dirnames, filenames in pruned_walk(
-            root_path, SOURCE_SCAN_SKIP_DIRS
+            root_path, SOURCE_SCAN_SKIP_DIRS, ctx.skip_report
         ):
             dir_path = Path(dirpath)
 

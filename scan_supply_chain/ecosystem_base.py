@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import re
 from pathlib import Path
 from typing import Protocol
@@ -66,26 +67,26 @@ class EcosystemPlugin(Protocol):
         self,
         names: list[str],
         search_roots: list[str],
+        skip_report,
     ) -> list[str]:
         """Check for phantom dependencies that should not exist.
 
         Returns list of IOC description strings for each found phantom dep.
+        ``skip_report`` is used to record any permission / read errors
+        encountered while walking the dependency trees.
         """
         ...
 
 
-_ecosystem_cache: dict[str, EcosystemPlugin] = {}
-
-
+@functools.lru_cache(maxsize=None)
 def get_ecosystem(ecosystem_name: str) -> EcosystemPlugin:
     """Factory: return a cached plugin for the ecosystem name.
 
     Plugins are stateless — one instance per ecosystem suffices.
-    For npm, this avoids re-running 'npm root -g' on each call.
+    For npm, this avoids re-running 'npm root -g' on each call (the
+    side effect lives in ``NpmPlugin.extra_search_roots``; the plugin
+    object itself is cheap to construct but cheap to cache too).
     """
-    if ecosystem_name in _ecosystem_cache:
-        return _ecosystem_cache[ecosystem_name]
-
     if ecosystem_name == "pypi":
         from .ecosystem_pypi import PyPIPlugin
 
@@ -97,5 +98,4 @@ def get_ecosystem(ecosystem_name: str) -> EcosystemPlugin:
     else:
         raise ValueError(f"Unknown ecosystem: {ecosystem_name!r}")
 
-    _ecosystem_cache[ecosystem_name] = plugin
     return plugin
