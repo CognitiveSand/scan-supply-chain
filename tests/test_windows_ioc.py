@@ -20,7 +20,8 @@ class TestRegistryRunKeys:
     def test_flags_matching_keyword(self, monkeypatch, capsys):
         # @req FR-28
         mock_run_safe(
-            monkeypatch, "ioc_windows",
+            monkeypatch,
+            "ioc_windows",
             "    sysmon    REG_SZ    C:\\backdoor.exe\n",
         )
 
@@ -32,7 +33,8 @@ class TestRegistryRunKeys:
     def test_clean_when_no_keywords_match(self, monkeypatch, capsys):
         # @req FR-28
         mock_run_safe(
-            monkeypatch, "ioc_windows",
+            monkeypatch,
+            "ioc_windows",
             "    OneDrive    REG_SZ    C:\\OneDrive.exe\n",
         )
 
@@ -67,7 +69,8 @@ class TestScheduledTasks:
     def test_flags_matching_keyword(self, monkeypatch, capsys):
         # @req FR-29
         mock_run_safe(
-            monkeypatch, "ioc_windows",
+            monkeypatch,
+            "ioc_windows",
             '"sysmon_persist","Running","Ready"\n',
         )
 
@@ -79,7 +82,8 @@ class TestScheduledTasks:
     def test_clean_when_no_keywords_match(self, monkeypatch, capsys):
         # @req FR-29
         mock_run_safe(
-            monkeypatch, "ioc_windows",
+            monkeypatch,
+            "ioc_windows",
             '"GoogleUpdate","Running","Ready"\n',
         )
 

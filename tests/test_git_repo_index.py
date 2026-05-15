@@ -193,6 +193,4 @@ class TestBuildRepoIndex:
 
 def _disable_git_log(monkeypatch) -> None:
     """Stub out git-on-PATH so no subprocess runs from tests by default."""
-    monkeypatch.setattr(
-        "scan_supply_chain.git_repo_index.shutil.which", lambda _: None
-    )
+    monkeypatch.setattr("scan_supply_chain.git_repo_index.shutil.which", lambda _: None)

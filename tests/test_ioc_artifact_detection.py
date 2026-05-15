@@ -50,9 +50,7 @@ class TestCheckKnownPaths:
     def test_reports_clean_when_no_paths_exist(self, tmp_path, capsys):
         # @req FR-12
         results = ScanResults()
-        _check_known_paths(
-            "test artifacts", [tmp_path / "nope"], results, SkipReport()
-        )
+        _check_known_paths("test artifacts", [tmp_path / "nope"], results, SkipReport())
 
         assert results.iocs == []
         captured = capsys.readouterr().out
@@ -346,7 +344,8 @@ class TestScanForC2Connections:
     def test_skips_when_network_tool_unavailable(self, monkeypatch, capsys):
         # @req FR-14 NFR-03
         monkeypatch.setattr(
-            "scan_supply_chain.ioc_scanner.shutil.which", lambda cmd: None,
+            "scan_supply_chain.ioc_scanner.shutil.which",
+            lambda cmd: None,
         )
 
         threat = make_litellm_threat()
@@ -395,7 +394,8 @@ class TestScanForMaliciousPods:
         # @req FR-19
         mock_tool_available(monkeypatch, "ioc_scanner", "kubectl")
         mock_subprocess_run(
-            monkeypatch, "ioc_scanner",
+            monkeypatch,
+            "ioc_scanner",
             "node-setup-abc123  1/1  Running  0  2h\nkube-proxy-xyz  1/1  Running  0  5d\n",
         )
 
@@ -411,7 +411,8 @@ class TestScanForMaliciousPods:
         # @req FR-19
         mock_tool_available(monkeypatch, "ioc_scanner", "kubectl")
         mock_subprocess_run(
-            monkeypatch, "ioc_scanner",
+            monkeypatch,
+            "ioc_scanner",
             "kube-proxy-xyz  1/1  Running  0  5d\n",
         )
 
@@ -427,7 +428,8 @@ class TestScanForMaliciousPods:
     def test_skips_when_kubectl_not_installed(self, monkeypatch, capsys):
         # @req FR-19 NFR-03
         monkeypatch.setattr(
-            "scan_supply_chain.ioc_scanner.shutil.which", lambda cmd: None,
+            "scan_supply_chain.ioc_scanner.shutil.which",
+            lambda cmd: None,
         )
 
         threat = make_litellm_threat()

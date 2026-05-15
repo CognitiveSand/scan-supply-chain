@@ -158,7 +158,9 @@ class TestFindPackageMetadata:
         (site_pkg / "litellm-1.82.7.dist-info").mkdir(parents=True)
 
         ecosystem = PyPIPlugin()
-        result = find_package_metadata([str(tmp_path)], ecosystem, "litellm", SkipReport())
+        result = find_package_metadata(
+            [str(tmp_path)], ecosystem, "litellm", SkipReport()
+        )
 
         assert len(result) == 1
 
@@ -167,7 +169,9 @@ class TestFindPackageMetadata:
         (tmp_path / "lib" / "site-packages" / "flask-3.0.dist-info").mkdir(parents=True)
 
         ecosystem = PyPIPlugin()
-        result = find_package_metadata([str(tmp_path)], ecosystem, "litellm", SkipReport())
+        result = find_package_metadata(
+            [str(tmp_path)], ecosystem, "litellm", SkipReport()
+        )
 
         assert result == []
 
@@ -177,6 +181,8 @@ class TestFindPackageMetadata:
         (target / "venv" / "lib" / "litellm-1.82.7.dist-info").mkdir(parents=True)
 
         ecosystem = PyPIPlugin()
-        result = find_package_metadata([str(target)], ecosystem, "litellm", SkipReport())
+        result = find_package_metadata(
+            [str(target)], ecosystem, "litellm", SkipReport()
+        )
 
         assert len(result) == 1

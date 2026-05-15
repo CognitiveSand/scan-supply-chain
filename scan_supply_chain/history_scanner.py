@@ -25,16 +25,17 @@ def scan_history(
     """
     if skip_report is None:
         skip_report = SkipReport()
-    with scanner_check(results, "shell history for install commands",
-                       "No install commands found in shell history"):
+    with scanner_check(
+        results,
+        "shell history for install commands",
+        "No install commands found in shell history",
+    ):
         install_cmds = _PYPI_INSTALL_CMDS if ecosystem == "pypi" else _NPM_INSTALL_CMDS
 
         home = Path.home()
         for hist_name in (".bash_history", ".zsh_history"):
             hist_path = home / hist_name
-            _scan_history_file(
-                results, hist_path, package, install_cmds, skip_report
-            )
+            _scan_history_file(results, hist_path, package, install_cmds, skip_report)
 
 
 def _scan_history_file(

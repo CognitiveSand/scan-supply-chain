@@ -23,7 +23,8 @@ class TestCheckCrontab:
         # @req FR-41
         mock_tool_available(monkeypatch, "persistence_scanner", "crontab")
         mock_run_safe(
-            monkeypatch, "persistence_scanner",
+            monkeypatch,
+            "persistence_scanner",
             "*/5 * * * * python3 -c 'import litellm'\n",
         )
 
@@ -37,7 +38,8 @@ class TestCheckCrontab:
         # @req FR-41
         mock_tool_available(monkeypatch, "persistence_scanner", "crontab")
         mock_run_safe(
-            monkeypatch, "persistence_scanner",
+            monkeypatch,
+            "persistence_scanner",
             "0 * * * * /usr/bin/backup\n",
         )
 
@@ -280,10 +282,6 @@ class TestScanPersistencePublicAPI:
         )
 
         results = ScanResults()
-        scan_persistence(
-            results, package="axios", extra_keywords=("gh-token-monitor",)
-        )
+        scan_persistence(results, package="axios", extra_keywords=("gh-token-monitor",))
 
-        assert any(
-            "gh-token-monitor" in f.description for f in results.findings
-        )
+        assert any("gh-token-monitor" in f.description for f in results.findings)

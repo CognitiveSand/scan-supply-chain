@@ -12,6 +12,7 @@ from .config import SOURCE_SCAN_SKIP_DIRS, pruned_walk
 from .models import ConfigReference, ScanResults, SourceReference
 
 if TYPE_CHECKING:
+    from .ecosystem_base import EcosystemPlugin
     from .scan_context import ScanContext
 
 logger = logging.getLogger(__name__)
@@ -30,12 +31,14 @@ class _SourcePatterns:
     """
 
     package: str
-    imports: list[re.Pattern]
-    deps: list[re.Pattern]
-    pinned: re.Pattern
+    imports: list[re.Pattern[str]]
+    deps: list[re.Pattern[str]]
+    pinned: re.Pattern[str]
 
     @classmethod
-    def from_ecosystem(cls, ecosystem, package: str) -> "_SourcePatterns":
+    def from_ecosystem(
+        cls, ecosystem: EcosystemPlugin, package: str
+    ) -> "_SourcePatterns":
         return cls(
             package=package,
             imports=ecosystem.import_patterns(package),
@@ -51,10 +54,10 @@ class _FileSelector:
     source_extensions: frozenset[str]
     config_filenames: frozenset[str]
     config_extensions: frozenset[str]
-    config_filename_pattern: re.Pattern | None
+    config_filename_pattern: re.Pattern[str] | None
 
     @classmethod
-    def from_ecosystem(cls, ecosystem) -> "_FileSelector":
+    def from_ecosystem(cls, ecosystem: EcosystemPlugin) -> "_FileSelector":
         return cls(
             source_extensions=ecosystem.source_extensions,
             config_filenames=ecosystem.config_filenames,
@@ -71,9 +74,8 @@ class _FileSelector:
     def _is_config_file(self, filename: str, extension: str) -> bool:
         if filename in self.config_filenames:
             return True
-        if (
-            self.config_filename_pattern
-            and self.config_filename_pattern.match(filename)
+        if self.config_filename_pattern and self.config_filename_pattern.match(
+            filename
         ):
             return True
         if extension in self.config_extensions and "require" in filename.lower():

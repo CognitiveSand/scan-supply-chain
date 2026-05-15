@@ -48,9 +48,7 @@ class TestSkipReport:
 
 
 class TestPrunedWalkInstrumentation:
-    @pytest.mark.skipif(
-        os.geteuid() == 0, reason="root bypasses POSIX permission bits"
-    )
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses POSIX permission bits")
     def test_subdirectory_permission_error_is_recorded(self, tmp_path):
         """os.walk silently skips inaccessible sub-trees unless onerror is set.
 
@@ -76,9 +74,7 @@ class TestPrunedWalkInstrumentation:
 
 
 class TestReadIfContainsInstrumentation:
-    @pytest.mark.skipif(
-        os.geteuid() == 0, reason="root bypasses POSIX permission bits"
-    )
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses POSIX permission bits")
     def test_unreadable_file_is_recorded(self, tmp_path):
         secret = tmp_path / "secret.txt"
         secret.write_text("contains the keyword")

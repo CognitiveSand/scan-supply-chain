@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
 from ..formatting import BOLD, GREEN, RED, RESET, YELLOW
 from ..models import ConfigReference, SourceReference
 
@@ -13,12 +16,13 @@ def _file_path_key(ref: SourceReference | ConfigReference) -> str:
 
 
 def _group_by_file(
-    refs: list[SourceReference] | list[ConfigReference], key=None
-) -> dict[str, list]:
+    refs: list[SourceReference] | list[ConfigReference],
+    key: Callable[[SourceReference | ConfigReference], str] | None = None,
+) -> dict[str, list[Any]]:
     """Group references by file path, preserving order."""
     if key is None:
         key = _file_path_key
-    grouped: dict[str, list] = {}
+    grouped: dict[str, list[Any]] = {}
     for ref in refs:
         grouped.setdefault(key(ref), []).append(ref)
     return grouped

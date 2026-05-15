@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -14,7 +15,7 @@ if TYPE_CHECKING:
 
 def _walk_for_metadata(
     root: Path,
-    metadata_pattern,
+    metadata_pattern: re.Pattern[str],
     package: str,
     skip_report: SkipReport,
 ) -> list[Path]:
@@ -73,9 +74,7 @@ def find_package_metadata(
         for root in roots:
             root_path = Path(root)
             if root_path.is_dir():
-                found.extend(
-                    _walk_for_node_modules(root_path, package, skip_report)
-                )
+                found.extend(_walk_for_node_modules(root_path, package, skip_report))
     else:
         metadata_pattern = ecosystem.metadata_dir_pattern(package)
         for root in roots:

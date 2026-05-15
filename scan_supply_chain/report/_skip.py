@@ -31,9 +31,7 @@ def print_skip_summary(report: SkipReport) -> None:
         return
 
     print_separator()
-    print(
-        f"\n{YELLOW}{BOLD}Skipped {report.total} path(s) during this scan{RESET}\n"
-    )
+    print(f"\n{YELLOW}{BOLD}Skipped {report.total} path(s) during this scan{RESET}\n")
 
     if report.permission_errors:
         print(
@@ -43,10 +41,7 @@ def print_skip_summary(report: SkipReport) -> None:
         _print_path_head(sorted(report.permission_errors))
 
     if report.read_errors:
-        print(
-            f"  {YELLOW}{BOLD}Read errors "
-            f"({len(report.read_errors)}):{RESET}"
-        )
+        print(f"  {YELLOW}{BOLD}Read errors ({len(report.read_errors)}):{RESET}")
         for path, reason in sorted(report.read_errors.items())[:_SKIP_SUMMARY_HEAD]:
             print(f"    {path}  ({reason})")
         remaining = len(report.read_errors) - _SKIP_SUMMARY_HEAD

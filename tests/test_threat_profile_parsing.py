@@ -66,12 +66,8 @@ repo_descriptions     = ["Shai-Hulud"]
         assert ga.workflow_name_regexes[0].search("formatter_42.yml")
         assert set(ga.branch_names) == {"fremen", "atreides"}
         assert len(ga.branch_name_regexes) == 1
-        assert ga.branch_name_regexes[0].search(
-            "add-linter-workflow-1732456789012"
-        )
-        assert ga.commit_author_emails == (
-            "claude@users.noreply.github.com",
-        )
+        assert ga.branch_name_regexes[0].search("add-linter-workflow-1732456789012")
+        assert ga.commit_author_emails == ("claude@users.noreply.github.com",)
         assert ga.repo_descriptions == ("Shai-Hulud",)
 
     def test_invalid_workflow_regex_raises_at_load_time(self, tmp_path):
@@ -100,10 +96,13 @@ branch_name_regexes = ["(["]
 class TestLoadFromDir:
     def test_invalid_regex_in_dir_raises_with_path(self, tmp_path):
         bad = tmp_path / "broken.toml"
-        bad.write_text(_MINIMAL_HEADER + """
+        bad.write_text(
+            _MINIMAL_HEADER
+            + """
 [ioc.git_artifacts]
 workflow_name_regexes = ["[unclosed"]
-""")
+"""
+        )
         with pytest.raises(InvalidThreatProfileError) as exc:
             _load_from_dir(tmp_path)
         assert exc.value.path == bad
@@ -198,10 +197,13 @@ freebsd = ["rm /tmp/foo"]
 
     def test_typo_wrapped_by_load_from_dir(self, tmp_path):
         bad = tmp_path / "broken.toml"
-        bad.write_text(_MINIMAL_HEADER + """
+        bad.write_text(
+            _MINIMAL_HEADER
+            + """
 [ioc.git_artifacts]
 branch_namez = ["fremen"]
-""")
+"""
+        )
         with pytest.raises(InvalidThreatProfileError) as exc:
             _load_from_dir(tmp_path)
         assert exc.value.path == bad

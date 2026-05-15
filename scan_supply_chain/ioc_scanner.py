@@ -24,6 +24,7 @@ from .formatting import (
 from .models import ScanResults
 
 if TYPE_CHECKING:
+    from .network_scanner import ConnectionRecord
     from .scan_context import ScanContext
     from .skip_report import SkipReport
 
@@ -162,7 +163,7 @@ def _resolve_c2_ips(ctx: ScanContext) -> dict[str, list[str]]:
     return result
 
 
-def _run_network_probe(command: list[str]):
+def _run_network_probe(command: list[str]) -> list[ConnectionRecord] | None:
     """Run the platform network-listing command and parse its output.
 
     Returns the parsed ``ConnectionRecord`` list, or ``None`` if the
@@ -184,7 +185,7 @@ def _run_network_probe(command: list[str]):
 
 
 def _emit_c2_finding(
-    results: ScanResults, record, domain: str
+    results: ScanResults, record: ConnectionRecord, domain: str
 ) -> None:
     """Print + record one matched C2 connection."""
     from .models import Finding, FindingCategory
@@ -194,10 +195,7 @@ def _emit_c2_finding(
     proc = record.process_name or "unknown"
     pid_str = f" (PID {record.pid})" if record.pid else ""
     exe_str = f" [{record.exe_path}]" if record.exe_path else ""
-    desc = (
-        f"{proc}{pid_str}{exe_str} -> "
-        f"{domain} ({record.peer_ip}:{record.peer_port})"
-    )
+    desc = f"{proc}{pid_str}{exe_str} -> {domain} ({record.peer_ip}:{record.peer_port})"
     print(f"  {RED}{BOLD}! ACTIVE CONNECTION: {desc}{RESET}")
     results.iocs.append(f"connection:{domain}:{record.peer_ip}")
     results.findings.append(
@@ -266,8 +264,7 @@ def _scan_for_malicious_pods(results: ScanResults, ctx: ScanContext) -> None:
             line
             for line in kubectl_output.splitlines()
             if any(
-                line.strip().startswith(pattern)
-                for pattern in kubernetes.pod_patterns
+                line.strip().startswith(pattern) for pattern in kubernetes.pod_patterns
             )
         ]
 

@@ -38,7 +38,7 @@ class EcosystemPlugin(Protocol):
         """Extra extensions treated as config when name contains 'require'."""
         ...
 
-    def metadata_dir_pattern(self, package: str) -> re.Pattern:
+    def metadata_dir_pattern(self, package: str) -> re.Pattern[str]:
         """Regex matching a metadata directory name for the given package."""
         ...
 
@@ -55,19 +55,19 @@ class EcosystemPlugin(Protocol):
         """
         ...
 
-    def import_patterns(self, package: str) -> list[re.Pattern]:
+    def import_patterns(self, package: str) -> list[re.Pattern[str]]:
         """Regex patterns matching source-level import/usage of the package."""
         ...
 
-    def dep_patterns(self, package: str) -> list[re.Pattern]:
+    def dep_patterns(self, package: str) -> list[re.Pattern[str]]:
         """Regex patterns matching the package in dependency/config files."""
         ...
 
-    def pinned_version_pattern(self, package: str) -> re.Pattern:
+    def pinned_version_pattern(self, package: str) -> re.Pattern[str]:
         """Regex that captures a pinned version (e.g. pkg==1.2.3 -> '1.2.3')."""
         ...
 
-    def config_filename_pattern(self) -> re.Pattern | None:
+    def config_filename_pattern(self) -> re.Pattern[str] | None:
         """Regex for dynamic config filenames (e.g. requirements*.txt)."""
         ...
 

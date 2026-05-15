@@ -73,9 +73,7 @@ def build_repo_index(
 # ── Discovery ───────────────────────────────────────────────────────────
 
 
-def _find_repo_roots(
-    roots: Iterable[str], skip_report: SkipReport
-) -> Iterator[Path]:
+def _find_repo_roots(roots: Iterable[str], skip_report: SkipReport) -> Iterator[Path]:
     """Yield the parent directory of each ``.git`` directory found.
 
     Does not descend into ``.git/`` itself. Prunes heavy/uninteresting
@@ -141,9 +139,7 @@ def _read_description(git_dir: Path, skip_report: SkipReport) -> str:
         return ""
 
 
-def _read_local_branches(
-    git_dir: Path, skip_report: SkipReport
-) -> Iterator[str]:
+def _read_local_branches(git_dir: Path, skip_report: SkipReport) -> Iterator[str]:
     """Yield local branch short names from refs/heads/ and packed-refs."""
     heads_dir = git_dir / "refs" / "heads"
     if heads_dir.is_dir():
@@ -168,16 +164,14 @@ def _read_local_branches(
                 ref = parts[1].strip()
                 prefix = "refs/heads/"
                 if ref.startswith(prefix):
-                    yield ref[len(prefix):]
+                    yield ref[len(prefix) :]
         except PermissionError:
             skip_report.record_permission(packed)
         except OSError as exc:
             skip_report.record_read_error(packed, type(exc).__name__)
 
 
-def _list_workflow_files(
-    repo_root: Path, skip_report: SkipReport
-) -> Iterator[Path]:
+def _list_workflow_files(repo_root: Path, skip_report: SkipReport) -> Iterator[Path]:
     """Yield .github/workflows/*.y[a]ml files next to the repo root."""
     workflows = repo_root / ".github" / "workflows"
     if not workflows.is_dir():

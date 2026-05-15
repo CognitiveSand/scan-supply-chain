@@ -9,6 +9,7 @@ import sys
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,12 @@ class WalkFileIOC:
     sha256: list[str] = field(default_factory=list)
 
 
-def _for_current_platform(*, linux, darwin, windows):
+_PlatformT = TypeVar("_PlatformT")
+
+
+def _for_current_platform(
+    *, linux: _PlatformT, darwin: _PlatformT, windows: _PlatformT
+) -> _PlatformT:
     """Select the value matching the current OS."""
     if sys.platform == "win32":
         return windows
@@ -155,32 +161,62 @@ class ThreatProfile:
 # ``UnknownProfileKeyError`` at parse time so the operator sees the bad
 # field rather than silently losing the value to a default.
 _TOP_LEVEL_KEYS: frozenset[str] = frozenset({"threat", "c2", "ioc", "remediation"})
-_THREAT_KEYS: frozenset[str] = frozenset({
-    "id", "name", "date", "ecosystem", "package",
-    "compromised", "safe", "advisory", "description",
-})
+_THREAT_KEYS: frozenset[str] = frozenset(
+    {
+        "id",
+        "name",
+        "date",
+        "ecosystem",
+        "package",
+        "compromised",
+        "safe",
+        "advisory",
+        "description",
+    }
+)
 _C2_KEYS: frozenset[str] = frozenset({"domains", "ports", "ips"})
-_IOC_KEYS: frozenset[str] = frozenset({
-    "walk_files", "known_paths", "phantom_deps", "kubernetes",
-    "windows", "persistence_keywords", "git_artifacts",
-})
+_IOC_KEYS: frozenset[str] = frozenset(
+    {
+        "walk_files",
+        "known_paths",
+        "phantom_deps",
+        "kubernetes",
+        "windows",
+        "persistence_keywords",
+        "git_artifacts",
+    }
+)
 _WALK_FILE_KEYS: frozenset[str] = frozenset({"description", "filenames", "sha256"})
-_KNOWN_PATH_KEYS: frozenset[str] = frozenset({
-    "description", "linux", "darwin", "windows",
-})
+_KNOWN_PATH_KEYS: frozenset[str] = frozenset(
+    {
+        "description",
+        "linux",
+        "darwin",
+        "windows",
+    }
+)
 _PHANTOM_DEPS_KEYS: frozenset[str] = frozenset({"names"})
 _KUBERNETES_KEYS: frozenset[str] = frozenset({"pod_patterns", "namespace"})
 _WINDOWS_KEYS: frozenset[str] = frozenset({"registry_keywords", "schtask_keywords"})
 _PERSISTENCE_KEYWORDS_KEYS: frozenset[str] = frozenset({"terms"})
-_GIT_ARTIFACTS_KEYS: frozenset[str] = frozenset({
-    "workflow_filenames", "workflow_name_regexes",
-    "branch_names", "branch_name_regexes",
-    "commit_author_emails", "repo_descriptions",
-})
-_REMEDIATION_KEYS: frozenset[str] = frozenset({
-    "rotate_secrets", "install_command",
-    "remove_artifacts", "check_persistence",
-})
+_GIT_ARTIFACTS_KEYS: frozenset[str] = frozenset(
+    {
+        "workflow_filenames",
+        "workflow_name_regexes",
+        "branch_names",
+        "branch_name_regexes",
+        "commit_author_emails",
+        "repo_descriptions",
+    }
+)
+_REMEDIATION_KEYS: frozenset[str] = frozenset(
+    {
+        "rotate_secrets",
+        "install_command",
+        "remove_artifacts",
+        "check_persistence",
+    }
+)
 _PLATFORM_KEYS: frozenset[str] = frozenset({"linux", "darwin", "windows"})
 
 
@@ -192,7 +228,7 @@ class UnknownProfileKeyError(ValueError):
     """
 
 
-def _check_keys(section_label: str, raw: dict, known: frozenset[str]) -> None:
+def _check_keys(section_label: str, raw: dict[str, Any], known: frozenset[str]) -> None:
     extra = set(raw) - known
     if extra:
         raise UnknownProfileKeyError(
@@ -201,7 +237,7 @@ def _check_keys(section_label: str, raw: dict, known: frozenset[str]) -> None:
         )
 
 
-def _parse_c2(raw: dict) -> C2Info:
+def _parse_c2(raw: dict[str, Any]) -> C2Info:
     _check_keys("c2", raw, _C2_KEYS)
     return C2Info(
         domains=raw.get("domains", []),
@@ -210,7 +246,7 @@ def _parse_c2(raw: dict) -> C2Info:
     )
 
 
-def _parse_walk_files(raw_list: list[dict]) -> list[WalkFileIOC]:
+def _parse_walk_files(raw_list: list[dict[str, Any]]) -> list[WalkFileIOC]:
     profiles: list[WalkFileIOC] = []
     for item in raw_list:
         _check_keys("ioc.walk_files", item, _WALK_FILE_KEYS)
@@ -224,7 +260,7 @@ def _parse_walk_files(raw_list: list[dict]) -> list[WalkFileIOC]:
     return profiles
 
 
-def _parse_known_paths(raw_list: list[dict]) -> list[KnownPathIOC]:
+def _parse_known_paths(raw_list: list[dict[str, Any]]) -> list[KnownPathIOC]:
     profiles: list[KnownPathIOC] = []
     for item in raw_list:
         _check_keys("ioc.known_paths", item, _KNOWN_PATH_KEYS)
@@ -257,7 +293,7 @@ def _compile_patterns(raw: list[str], field_name: str) -> tuple[re.Pattern[str],
     return tuple(compiled)
 
 
-def _parse_git_artifacts(raw: dict) -> GitArtifactsIOC:
+def _parse_git_artifacts(raw: dict[str, Any]) -> GitArtifactsIOC:
     _check_keys("ioc.git_artifacts", raw, _GIT_ARTIFACTS_KEYS)
     return GitArtifactsIOC(
         workflow_filenames=tuple(raw.get("workflow_filenames", [])),
@@ -275,7 +311,7 @@ def _parse_git_artifacts(raw: dict) -> GitArtifactsIOC:
     )
 
 
-def _parse_remediation(raw: dict) -> RemediationInfo:
+def _parse_remediation(raw: dict[str, Any]) -> RemediationInfo:
     _check_keys("remediation", raw, _REMEDIATION_KEYS)
     remove_artifacts = raw.get("remove_artifacts", {})
     _check_keys("remediation.remove_artifacts", remove_artifacts, _PLATFORM_KEYS)
@@ -289,7 +325,7 @@ def _parse_remediation(raw: dict) -> RemediationInfo:
     )
 
 
-def _parse_kubernetes(raw: dict) -> KubernetesIOC:
+def _parse_kubernetes(raw: dict[str, Any]) -> KubernetesIOC:
     _check_keys("ioc.kubernetes", raw, _KUBERNETES_KEYS)
     return KubernetesIOC(
         pod_patterns=raw.get("pod_patterns", []),
@@ -297,7 +333,7 @@ def _parse_kubernetes(raw: dict) -> KubernetesIOC:
     )
 
 
-def _parse_windows_ioc(raw: dict) -> WindowsIOC:
+def _parse_windows_ioc(raw: dict[str, Any]) -> WindowsIOC:
     _check_keys("ioc.windows", raw, _WINDOWS_KEYS)
     return WindowsIOC(
         registry_keywords=raw.get("registry_keywords", []),
@@ -305,17 +341,18 @@ def _parse_windows_ioc(raw: dict) -> WindowsIOC:
     )
 
 
-def _parse_phantom_deps(raw: dict) -> list[str]:
+def _parse_phantom_deps(raw: dict[str, Any]) -> list[str]:
     _check_keys("ioc.phantom_deps", raw, _PHANTOM_DEPS_KEYS)
-    return raw.get("names", [])
+    names = raw.get("names", [])
+    return list(names) if isinstance(names, list) else []
 
 
-def _parse_persistence_keywords(raw: dict) -> tuple[str, ...]:
+def _parse_persistence_keywords(raw: dict[str, Any]) -> tuple[str, ...]:
     _check_keys("ioc.persistence_keywords", raw, _PERSISTENCE_KEYWORDS_KEYS)
     return tuple(raw.get("terms", []))
 
 
-def _parse_profile(data: dict) -> ThreatProfile:
+def _parse_profile(data: dict[str, Any]) -> ThreatProfile:
     """Parse a raw TOML dict into a ThreatProfile."""
     _check_keys("<root>", data, _TOP_LEVEL_KEYS)
     threat = data.get("threat", {})

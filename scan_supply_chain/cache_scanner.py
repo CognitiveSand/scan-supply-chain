@@ -87,8 +87,13 @@ def _scan_pip_cache(
     results: ScanResults, package: str, skip_report: SkipReport
 ) -> None:
     _scan_cache_dir(
-        results, _pip_cache_dir(), package, "pip cache", skip_report,
-        check_dirs=True, check_files=True,
+        results,
+        _pip_cache_dir(),
+        package,
+        "pip cache",
+        skip_report,
+        check_dirs=True,
+        check_files=True,
     )
 
 
@@ -96,7 +101,10 @@ def _scan_npm_cache(
     results: ScanResults, package: str, skip_report: SkipReport
 ) -> None:
     _scan_cache_dir(
-        results, Path.home() / ".npm" / "_cacache", package, "npm cache",
+        results,
+        Path.home() / ".npm" / "_cacache",
+        package,
+        "npm cache",
         skip_report,
     )
 
@@ -107,6 +115,9 @@ def _scan_pnpm_store(
     _scan_cache_dir(
         results,
         Path.home() / ".local" / "share" / "pnpm" / "store",
-        package, "pnpm store", skip_report,
-        check_dirs=True, check_files=False,
+        package,
+        "pnpm store",
+        skip_report,
+        check_dirs=True,
+        check_files=False,
     )

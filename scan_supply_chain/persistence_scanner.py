@@ -43,8 +43,9 @@ def scan_persistence(
     if skip_report is None:
         skip_report = SkipReport()
     search_terms: list[str] = [package, *extra_keywords]
-    with scanner_check(results, "generic persistence locations",
-                       "No suspicious persistence found"):
+    with scanner_check(
+        results, "generic persistence locations", "No suspicious persistence found"
+    ):
         _check_crontab(results, search_terms)
         _check_shell_rc(results, search_terms, skip_report)
         _check_tmp_scripts(results, package, skip_report)

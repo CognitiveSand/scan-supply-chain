@@ -55,9 +55,7 @@ GIT_REPO_WALK_SKIP_DIRS = (_COMMON_SKIP_DIRS - {".git"}) | {
 }
 
 
-def read_if_contains(
-    path: Path, keyword: str, skip_report: SkipReport
-) -> str | None:
+def read_if_contains(path: Path, keyword: str, skip_report: SkipReport) -> str | None:
     """Read a text file if it mentions *keyword*; return text or ``None``.
 
     Permission and read failures are recorded on ``skip_report`` so the

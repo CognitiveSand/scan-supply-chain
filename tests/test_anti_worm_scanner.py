@@ -92,13 +92,7 @@ class TestStrongSignals:
         scan_anti_worm(
             results,
             WormIndicators(workflow_filenames=frozenset({"discussion.yaml"})),
-            [
-                _snapshot(
-                    workflow_files=(
-                        Path("/r/.github/workflows/discussion.yaml"),
-                    )
-                )
-            ],
+            [_snapshot(workflow_files=(Path("/r/.github/workflows/discussion.yaml"),))],
         )
         assert len(results.findings) == 1
         f = results.findings[0]
@@ -115,9 +109,7 @@ class TestStrongSignals:
             ),
             [
                 _snapshot(
-                    workflow_files=(
-                        Path("/r/.github/workflows/formatter_12345.yml"),
-                    )
+                    workflow_files=(Path("/r/.github/workflows/formatter_12345.yml"),)
                 )
             ],
         )
@@ -156,9 +148,7 @@ class TestWeakSignals:
         scan_anti_worm(
             results,
             WormIndicators(
-                branch_name_regexes=(
-                    re.compile(r"^add-linter-workflow-\d+$"),
-                ),
+                branch_name_regexes=(re.compile(r"^add-linter-workflow-\d+$"),),
             ),
             [
                 _snapshot(
@@ -192,9 +182,7 @@ class TestWeakSignals:
         scan_anti_worm(
             results,
             WormIndicators(
-                commit_author_emails=frozenset(
-                    {"claude@users.noreply.github.com"}
-                )
+                commit_author_emails=frozenset({"claude@users.noreply.github.com"})
             ),
             [
                 _snapshot(
@@ -239,9 +227,7 @@ class TestWeakSignals:
             [
                 _snapshot(
                     local_branches=("sandworm",),
-                    workflow_files=(
-                        Path("/r/.github/workflows/discussion.yaml"),
-                    ),
+                    workflow_files=(Path("/r/.github/workflows/discussion.yaml"),),
                 )
             ],
         )
@@ -256,16 +242,12 @@ class TestWeakSignals:
             results,
             WormIndicators(
                 branch_names=frozenset({"fremen"}),
-                commit_author_emails=frozenset(
-                    {"claude@users.noreply.github.com"}
-                ),
+                commit_author_emails=frozenset({"claude@users.noreply.github.com"}),
             ),
             [
                 _snapshot(
                     local_branches=("fremen",),
-                    recent_author_emails=(
-                        "claude@users.noreply.github.com",
-                    ),
+                    recent_author_emails=("claude@users.noreply.github.com",),
                 )
             ],
         )
@@ -350,9 +332,7 @@ class TestAggregateIndicators:
     def test_passes_workflow_regexes_through(self):
         threat = make_axios_threat(
             git_artifacts=GitArtifactsIOC(
-                workflow_name_regexes=(
-                    re.compile(r"^formatter_\d+\.ya?ml$"),
-                ),
+                workflow_name_regexes=(re.compile(r"^formatter_\d+\.ya?ml$"),),
             ),
         )
         result = aggregate_indicators([threat])
@@ -362,13 +342,9 @@ class TestAggregateIndicators:
     def test_passes_branch_regexes_through(self):
         threat = make_axios_threat(
             git_artifacts=GitArtifactsIOC(
-                branch_name_regexes=(
-                    re.compile(r"^add-linter-workflow-\d+$"),
-                ),
+                branch_name_regexes=(re.compile(r"^add-linter-workflow-\d+$"),),
             ),
         )
         result = aggregate_indicators([threat])
         assert len(result.branch_name_regexes) == 1
-        assert result.branch_name_regexes[0].search(
-            "add-linter-workflow-1732456789012"
-        )
+        assert result.branch_name_regexes[0].search("add-linter-workflow-1732456789012")

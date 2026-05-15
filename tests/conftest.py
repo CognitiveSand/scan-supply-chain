@@ -286,7 +286,9 @@ def mock_subprocess_run(monkeypatch, module: str, stdout: str) -> None:
     monkeypatch.setattr(
         f"scan_supply_chain.{module}.subprocess.run",
         lambda *a, **kw: subprocess.CompletedProcess(
-            args=a[0], returncode=0, stdout=stdout,
+            args=a[0],
+            returncode=0,
+            stdout=stdout,
         ),
     )
 

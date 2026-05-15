@@ -249,7 +249,9 @@ class TestNpmPhantomDepWalkWithPnpm:
         )
 
         plugin = NpmPlugin()
-        found = plugin.find_phantom_deps(["plain-crypto-js"], [str(tmp_path)], SkipReport())
+        found = plugin.find_phantom_deps(
+            ["plain-crypto-js"], [str(tmp_path)], SkipReport()
+        )
 
         assert len(found) == 1
         assert "plain-crypto-js" in found[0]
@@ -265,7 +267,9 @@ class TestNpmPhantomDepWalk:
         nm.mkdir(parents=True)
 
         plugin = NpmPlugin()
-        found = plugin.find_phantom_deps(["plain-crypto-js"], [str(tmp_path)], SkipReport())
+        found = plugin.find_phantom_deps(
+            ["plain-crypto-js"], [str(tmp_path)], SkipReport()
+        )
 
         assert len(found) == 1
         assert "plain-crypto-js" in found[0]
@@ -285,7 +289,9 @@ class TestNpmPhantomDepWalk:
         )
 
         plugin = NpmPlugin()
-        found = plugin.find_phantom_deps(["plain-crypto-js"], [str(tmp_path)], SkipReport())
+        found = plugin.find_phantom_deps(
+            ["plain-crypto-js"], [str(tmp_path)], SkipReport()
+        )
 
         assert len(found) == 1
         assert "4.2.1" in found[0]
@@ -296,7 +302,9 @@ class TestNpmPhantomDepWalk:
         nm.mkdir(parents=True)
 
         plugin = NpmPlugin()
-        found = plugin.find_phantom_deps(["plain-crypto-js"], [str(tmp_path)], SkipReport())
+        found = plugin.find_phantom_deps(
+            ["plain-crypto-js"], [str(tmp_path)], SkipReport()
+        )
 
         assert found == []
 

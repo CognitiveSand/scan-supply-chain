@@ -43,7 +43,7 @@ class NpmPlugin:
     def config_extensions(self) -> frozenset[str]:
         return frozenset()  # no extension-based matching for npm configs
 
-    def metadata_dir_pattern(self, package: str) -> re.Pattern:
+    def metadata_dir_pattern(self, package: str) -> re.Pattern[str]:
         # npm packages live in node_modules/{package}/
         # For scoped packages: node_modules/@scope/name/
         escaped = re.escape(package)
@@ -69,9 +69,10 @@ class NpmPlugin:
         except json.JSONDecodeError:
             logger.debug("Cannot parse %s as JSON", pkg_json)
             return None
-        return data.get("version")
+        version = data.get("version") if isinstance(data, dict) else None
+        return version if isinstance(version, str) else None
 
-    def import_patterns(self, package: str) -> list[re.Pattern]:
+    def import_patterns(self, package: str) -> list[re.Pattern[str]]:
         escaped = re.escape(package)
         return [
             # require('axios') or require("axios")
@@ -84,7 +85,7 @@ class NpmPlugin:
             re.compile(rf"""import\s+['"]({escaped})(?:/[^'"]*)?['"]"""),
         ]
 
-    def dep_patterns(self, package: str) -> list[re.Pattern]:
+    def dep_patterns(self, package: str) -> list[re.Pattern[str]]:
         escaped = re.escape(package)
         return [
             # package.json: "axios": "^1.14.0"
@@ -95,7 +96,7 @@ class NpmPlugin:
             re.compile(rf"""["']node_modules/{escaped}["']"""),
         ]
 
-    def pinned_version_pattern(self, package: str) -> re.Pattern:
+    def pinned_version_pattern(self, package: str) -> re.Pattern[str]:
         escaped = re.escape(package)
         # Matches both:
         #   "axios": "1.14.1"  (package.json dependency)
@@ -104,7 +105,7 @@ class NpmPlugin:
             rf"""(?:["']{escaped}["']|["']version["'])\s*:\s*["']([0-9][0-9a-zA-Z.*-]*)["']"""
         )
 
-    def config_filename_pattern(self) -> re.Pattern | None:
+    def config_filename_pattern(self) -> re.Pattern[str] | None:
         return None  # no dynamic config filenames for npm
 
     def extra_search_roots(self) -> list[str]:
