@@ -44,34 +44,34 @@ python3 99999 user   12u  IPv6 789012      0t0  TCP [2001:db8::a]:56006->[2001:d
 
 
 class TestParseSsOutput:
-    def test_parses_connections(self):
+    def test_parses_connections(self) -> None:
         # @req FR-39
         records = parse_ss_output(SS_SAMPLE)
         assert len(records) == 3
 
-    def test_extracts_peer_ip_and_port(self):
+    def test_extracts_peer_ip_and_port(self) -> None:
         # @req FR-39
         records = parse_ss_output(SS_SAMPLE)
         c2 = [r for r in records if r.peer_ip == "142.11.206.73"]
         assert len(c2) == 1
         assert c2[0].peer_port == 8000
 
-    def test_extracts_pid_and_process(self):
+    def test_extracts_pid_and_process(self) -> None:
         # @req FR-39
         records = parse_ss_output(SS_SAMPLE)
         c2 = [r for r in records if r.peer_ip == "142.11.206.73"][0]
         assert c2.pid == 99999
         assert c2.process_name == "python3"
 
-    def test_handles_empty_output(self):
+    def test_handles_empty_output(self) -> None:
         # @req FR-39 NFR-03
         assert parse_ss_output("") == []
 
-    def test_handles_header_only(self):
+    def test_handles_header_only(self) -> None:
         # @req FR-39
         assert parse_ss_output("State Recv-Q Send-Q ...\n") == []
 
-    def test_strips_brackets_from_ipv6_peer(self):
+    def test_strips_brackets_from_ipv6_peer(self) -> None:
         # @req FR-39
         # Bare ``rpartition(":")`` would leave the closing bracket in
         # peer_ip, silently missing every IPv6 C2 address.
@@ -83,12 +83,12 @@ class TestParseSsOutput:
 
 
 class TestParseLsofOutput:
-    def test_parses_connections(self):
+    def test_parses_connections(self) -> None:
         # @req FR-39
         records = parse_lsof_output(LSOF_SAMPLE)
         assert len(records) == 2
 
-    def test_extracts_peer_and_process(self):
+    def test_extracts_peer_and_process(self) -> None:
         # @req FR-39
         records = parse_lsof_output(LSOF_SAMPLE)
         c2 = [r for r in records if r.peer_ip == "142.11.206.73"][0]
@@ -96,7 +96,7 @@ class TestParseLsofOutput:
         assert c2.process_name == "python3"
         assert c2.pid == 99999
 
-    def test_strips_brackets_from_ipv6_peer(self):
+    def test_strips_brackets_from_ipv6_peer(self) -> None:
         # @req FR-39
         records = parse_lsof_output(LSOF_IPV6_SAMPLE)
         assert len(records) == 1
@@ -105,7 +105,7 @@ class TestParseLsofOutput:
 
 
 class TestFindC2Connections:
-    def test_matches_by_ip(self):
+    def test_matches_by_ip(self) -> None:
         # @req FR-39
         records = [ConnectionRecord("142.11.206.73", 8000, 99, "python3")]
         domain_ips = {"sfrclak.com": ["142.11.206.73"]}
@@ -115,7 +115,7 @@ class TestFindC2Connections:
         assert len(matches) == 1
         assert matches[0][1] == "sfrclak.com"
 
-    def test_matches_by_ip_and_port(self):
+    def test_matches_by_ip_and_port(self) -> None:
         # @req FR-39 FR-15
         records = [ConnectionRecord("142.11.206.73", 8000, 99, "python3")]
         domain_ips = {"sfrclak.com": ["142.11.206.73"]}
@@ -124,7 +124,7 @@ class TestFindC2Connections:
 
         assert len(matches) == 1
 
-    def test_rejects_wrong_port(self):
+    def test_rejects_wrong_port(self) -> None:
         # @req FR-15
         records = [ConnectionRecord("142.11.206.73", 443, 99, "python3")]
         domain_ips = {"sfrclak.com": ["142.11.206.73"]}
@@ -133,7 +133,7 @@ class TestFindC2Connections:
 
         assert matches == []
 
-    def test_accepts_any_port_when_ports_empty(self):
+    def test_accepts_any_port_when_ports_empty(self) -> None:
         # @req FR-39
         records = [ConnectionRecord("142.11.206.73", 12345, 99, "python3")]
         domain_ips = {"sfrclak.com": ["142.11.206.73"]}
@@ -142,7 +142,7 @@ class TestFindC2Connections:
 
         assert len(matches) == 1
 
-    def test_no_match_for_unrelated_ip(self):
+    def test_no_match_for_unrelated_ip(self) -> None:
         # @req FR-39
         records = [ConnectionRecord("1.2.3.4", 443, 99, "curl")]
         domain_ips = {"sfrclak.com": ["142.11.206.73"]}
@@ -153,7 +153,7 @@ class TestFindC2Connections:
 
 
 class TestEnrichFromProc:
-    def test_reads_exe_path(self):
+    def test_reads_exe_path(self) -> None:
         # @req FR-40
         record = ConnectionRecord("1.2.3.4", 443, 12345, "python3")
 
@@ -164,7 +164,7 @@ class TestEnrichFromProc:
 
         assert enriched.exe_path == "/usr/bin/python3.13"
 
-    def test_handles_permission_error(self):
+    def test_handles_permission_error(self) -> None:
         # @req FR-40 NFR-03
         record = ConnectionRecord("1.2.3.4", 443, 12345, "python3")
 
@@ -177,7 +177,7 @@ class TestEnrichFromProc:
 
         assert enriched.exe_path == ""
 
-    def test_skips_on_windows(self):
+    def test_skips_on_windows(self) -> None:
         # @req FR-40
         record = ConnectionRecord("1.2.3.4", 443, 12345, "python3")
 
@@ -186,7 +186,7 @@ class TestEnrichFromProc:
 
         assert enriched.exe_path == ""
 
-    def test_skips_when_no_pid(self):
+    def test_skips_when_no_pid(self) -> None:
         # @req FR-40
         record = ConnectionRecord("1.2.3.4", 443, 0, "")
         enriched = enrich_from_proc(record)

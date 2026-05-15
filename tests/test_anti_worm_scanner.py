@@ -45,7 +45,7 @@ def _snapshot(
 
 
 class TestNoOpCases:
-    def test_empty_indicators_emit_nothing(self):
+    def test_empty_indicators_emit_nothing(self) -> None:
         results = ScanResults()
         scan_anti_worm(
             results,
@@ -54,7 +54,7 @@ class TestNoOpCases:
         )
         assert results.findings == []
 
-    def test_no_snapshots_emit_nothing(self):
+    def test_no_snapshots_emit_nothing(self) -> None:
         results = ScanResults()
         scan_anti_worm(
             results,
@@ -63,7 +63,7 @@ class TestNoOpCases:
         )
         assert results.findings == []
 
-    def test_clean_repo_emits_nothing(self):
+    def test_clean_repo_emits_nothing(self) -> None:
         results = ScanResults()
         scan_anti_worm(
             results,
@@ -87,7 +87,7 @@ class TestNoOpCases:
 
 
 class TestStrongSignals:
-    def test_workflow_filename_match_is_high_alone(self):
+    def test_workflow_filename_match_is_high_alone(self) -> None:
         results = ScanResults()
         scan_anti_worm(
             results,
@@ -100,7 +100,7 @@ class TestStrongSignals:
         assert f.weight == HIGH
         assert "discussion.yaml" in f.description
 
-    def test_workflow_name_regex_match_is_high_alone(self):
+    def test_workflow_name_regex_match_is_high_alone(self) -> None:
         results = ScanResults()
         scan_anti_worm(
             results,
@@ -116,7 +116,7 @@ class TestStrongSignals:
         assert len(results.findings) == 1
         assert results.findings[0].weight == HIGH
 
-    def test_repo_description_match_is_high_alone(self):
+    def test_repo_description_match_is_high_alone(self) -> None:
         results = ScanResults()
         scan_anti_worm(
             results,
@@ -132,7 +132,7 @@ class TestStrongSignals:
 
 
 class TestWeakSignals:
-    def test_branch_name_alone_is_low(self):
+    def test_branch_name_alone_is_low(self) -> None:
         results = ScanResults()
         scan_anti_worm(
             results,
@@ -143,7 +143,7 @@ class TestWeakSignals:
         assert results.findings[0].weight == LOW
         assert "fremen" in results.findings[0].description
 
-    def test_branch_name_regex_match_is_low_alone(self):
+    def test_branch_name_regex_match_is_low_alone(self) -> None:
         results = ScanResults()
         scan_anti_worm(
             results,
@@ -164,7 +164,7 @@ class TestWeakSignals:
         assert f.weight == LOW
         assert "add-linter-workflow-1732456789012" in f.description
 
-    def test_branch_regex_dedupes_with_literal(self):
+    def test_branch_regex_dedupes_with_literal(self) -> None:
         """A branch matched by both a literal and a regex emits one finding."""
         results = ScanResults()
         scan_anti_worm(
@@ -177,7 +177,7 @@ class TestWeakSignals:
         )
         assert len(results.findings) == 1
 
-    def test_author_email_alone_is_low(self):
+    def test_author_email_alone_is_low(self) -> None:
         results = ScanResults()
         scan_anti_worm(
             results,
@@ -196,7 +196,7 @@ class TestWeakSignals:
         assert len(results.findings) == 1
         assert results.findings[0].weight == LOW
 
-    def test_branch_plus_description_escalates_branch_to_high(self):
+    def test_branch_plus_description_escalates_branch_to_high(self) -> None:
         results = ScanResults()
         scan_anti_worm(
             results,
@@ -216,7 +216,7 @@ class TestWeakSignals:
         for f in results.findings:
             assert f.weight == HIGH
 
-    def test_branch_plus_workflow_escalates_branch_to_high(self):
+    def test_branch_plus_workflow_escalates_branch_to_high(self) -> None:
         results = ScanResults()
         scan_anti_worm(
             results,
@@ -235,7 +235,7 @@ class TestWeakSignals:
         weights = sorted(f.weight for f in results.findings)
         assert weights == [HIGH, HIGH]
 
-    def test_two_weak_signals_alone_stay_low(self):
+    def test_two_weak_signals_alone_stay_low(self) -> None:
         """Weak + weak (no strong) does not escalate."""
         results = ScanResults()
         scan_anti_worm(
@@ -260,7 +260,7 @@ class TestWeakSignals:
 
 
 class TestPerRepoScoping:
-    def test_corroboration_is_per_repo_not_global(self):
+    def test_corroboration_is_per_repo_not_global(self) -> None:
         """Strong signal in repo A must not escalate weak signal in repo B."""
         results = ScanResults()
         scan_anti_worm(
@@ -297,17 +297,17 @@ class TestPerRepoScoping:
 
 
 class TestAggregateIndicators:
-    def test_empty_threats_returns_empty(self):
+    def test_empty_threats_returns_empty(self) -> None:
         result = aggregate_indicators([])
         assert result.is_empty
 
-    def test_threat_without_git_artifacts_contributes_nothing(self):
+    def test_threat_without_git_artifacts_contributes_nothing(self) -> None:
         # Axios threat has no git_artifacts block.
         threat = make_axios_threat()
         result = aggregate_indicators([threat])
         assert result.is_empty
 
-    def test_union_across_multiple_threats(self):
+    def test_union_across_multiple_threats(self) -> None:
         t1 = make_axios_threat(
             git_artifacts=GitArtifactsIOC(
                 workflow_filenames=("discussion.yaml",),
@@ -334,7 +334,7 @@ class TestAggregateIndicators:
         )
         assert result.repo_descriptions == ("Shai-Hulud",)
 
-    def test_passes_workflow_regexes_through(self):
+    def test_passes_workflow_regexes_through(self) -> None:
         threat = make_axios_threat(
             git_artifacts=GitArtifactsIOC(
                 workflow_name_regexes=(re.compile(r"^formatter_\d+\.ya?ml$"),),
@@ -344,7 +344,7 @@ class TestAggregateIndicators:
         assert len(result.workflow_name_regexes) == 1
         assert result.workflow_name_regexes[0].search("formatter_12345.yml")
 
-    def test_passes_branch_regexes_through(self):
+    def test_passes_branch_regexes_through(self) -> None:
         threat = make_axios_threat(
             git_artifacts=GitArtifactsIOC(
                 branch_name_regexes=(re.compile(r"^add-linter-workflow-\d+$"),),

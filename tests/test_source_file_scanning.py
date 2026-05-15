@@ -3,23 +3,30 @@
 Module under test: scan_supply_chain.source_scanner
 """
 
+from pathlib import Path
+
 import pytest
 
 from scan_supply_chain.ecosystem_pypi import PyPIPlugin
 from scan_supply_chain.models import ScanResults
+from scan_supply_chain.scan_context import ScanContext
 from scan_supply_chain.source_scanner import scan_source_and_configs
 from tests.conftest import make_litellm_threat, make_scan_context
+
+Setup = tuple[Path, ScanContext, ScanResults]
 
 
 class TestScanSourceAndConfigs:
     @pytest.fixture
-    def setup(self, tmp_path):
+    def setup(self, tmp_path: Path) -> Setup:
         threat = make_litellm_threat()
         results = ScanResults(compromised_versions=threat.compromised)
         ctx = make_scan_context(threat, PyPIPlugin(), [str(tmp_path)])
         return tmp_path, ctx, results
 
-    def test_finds_litellm_import_in_py_file(self, setup, capsys):
+    def test_finds_litellm_import_in_py_file(
+        self, setup: Setup, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         # @req FR-20
         tmp_path, ctx, results = setup
         py_file = tmp_path / "app.py"
@@ -30,7 +37,9 @@ class TestScanSourceAndConfigs:
         assert len(results.source_refs) >= 1
         assert any("import litellm" in r.line_content for r in results.source_refs)
 
-    def test_finds_litellm_in_requirements_txt(self, setup, capsys):
+    def test_finds_litellm_in_requirements_txt(
+        self, setup: Setup, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         # @req FR-21 FR-22
         tmp_path, ctx, results = setup
         req_file = tmp_path / "requirements.txt"
@@ -41,7 +50,9 @@ class TestScanSourceAndConfigs:
         assert len(results.config_refs) >= 1
         assert any(r.pinned_version == "1.82.7" for r in results.config_refs)
 
-    def test_finds_litellm_in_pyproject_toml(self, setup, capsys):
+    def test_finds_litellm_in_pyproject_toml(
+        self, setup: Setup, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         # @req FR-21
         tmp_path, ctx, results = setup
         toml_file = tmp_path / "pyproject.toml"
@@ -51,7 +62,9 @@ class TestScanSourceAndConfigs:
 
         assert len(results.config_refs) >= 1
 
-    def test_ignores_files_without_package_name(self, setup, capsys):
+    def test_ignores_files_without_package_name(
+        self, setup: Setup, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         # @req FR-20
         tmp_path, ctx, results = setup
         py_file = tmp_path / "app.py"
@@ -62,7 +75,9 @@ class TestScanSourceAndConfigs:
         assert results.source_refs == []
         assert count >= 1  # file was scanned
 
-    def test_skips_scanner_own_source_code(self, setup, capsys):
+    def test_skips_scanner_own_source_code(
+        self, setup: Setup, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         # @req FR-30
         tmp_path, ctx, results = setup
         # Even if litellm is in scanner's own source, it should be excluded
@@ -70,7 +85,9 @@ class TestScanSourceAndConfigs:
         # Just verify it doesn't crash
         assert count >= 0
 
-    def test_returns_file_count(self, setup, capsys):
+    def test_returns_file_count(
+        self, setup: Setup, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         # @req FR-20
         tmp_path, ctx, results = setup
         (tmp_path / "a.py").write_text("x = 1\n")
@@ -80,7 +97,9 @@ class TestScanSourceAndConfigs:
 
         assert count == 2
 
-    def test_skips_site_packages(self, setup, capsys):
+    def test_skips_site_packages(
+        self, setup: Setup, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         # @req FR-20
         tmp_path, ctx, results = setup
         sp = tmp_path / "site-packages"
@@ -92,7 +111,9 @@ class TestScanSourceAndConfigs:
         # site-packages should be skipped in source scanning
         assert results.source_refs == []
 
-    def test_handles_binary_file_gracefully(self, setup, capsys):
+    def test_handles_binary_file_gracefully(
+        self, setup: Setup, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         # @req NFR-03
         tmp_path, ctx, results = setup
         (tmp_path / "data.py").write_bytes(b"\x00\x01\x02litellm\xff\xfe")
@@ -100,7 +121,9 @@ class TestScanSourceAndConfigs:
         # Should not crash
         scan_source_and_configs(results, ctx)
 
-    def test_scans_symlinked_files_without_crash(self, setup, capsys):
+    def test_scans_symlinked_files_without_crash(
+        self, setup: Setup, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         # @req FR-20
         tmp_path, ctx, results = setup
         real_file = tmp_path / "real.py"

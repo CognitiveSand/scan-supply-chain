@@ -3,6 +3,8 @@
 Module under test: scan_supply_chain.source_scanner
 """
 
+import re
+
 import pytest
 
 from scan_supply_chain.ecosystem_pypi import PyPIPlugin
@@ -21,7 +23,7 @@ def _is_config(selector: _FileSelector, filename: str, extension: str) -> bool:
 
 class TestIsConfigFile:
     @pytest.fixture
-    def selector(self):
+    def selector(self) -> _FileSelector:
         return _FileSelector.from_ecosystem(PyPIPlugin())
 
     @pytest.mark.parametrize(
@@ -40,7 +42,9 @@ class TestIsConfigFile:
             "uv.lock",
         ],
     )
-    def test_recognizes_known_config_files(self, selector, filename):
+    def test_recognizes_known_config_files(
+        self, selector: _FileSelector, filename: str
+    ) -> None:
         # @req FR-21
         ext = "." + filename.rsplit(".", 1)[-1] if "." in filename else ""
         assert _is_config(selector, filename, ext)
@@ -52,7 +56,9 @@ class TestIsConfigFile:
             "requirements-test.txt",
         ],
     )
-    def test_recognizes_requirements_variants(self, selector, filename):
+    def test_recognizes_requirements_variants(
+        self, selector: _FileSelector, filename: str
+    ) -> None:
         # @req FR-21
         assert _is_config(selector, filename, ".txt")
 
@@ -65,7 +71,9 @@ class TestIsConfigFile:
             "image.png",
         ],
     )
-    def test_rejects_non_config_files(self, selector, filename):
+    def test_rejects_non_config_files(
+        self, selector: _FileSelector, filename: str
+    ) -> None:
         # @req FR-21
         ext = "." + filename.rsplit(".", 1)[-1] if "." in filename else ""
         assert not _is_config(selector, filename, ext)
@@ -76,7 +84,7 @@ class TestIsConfigFile:
 
 class TestSourcePatternMatching:
     @pytest.fixture
-    def import_patterns(self):
+    def import_patterns(self) -> list[re.Pattern[str]]:
         return PyPIPlugin().import_patterns("litellm")
 
     @pytest.mark.parametrize(
@@ -90,7 +98,9 @@ class TestSourcePatternMatching:
             'x = litellm.completion("hello")',
         ],
     )
-    def test_matches_import_patterns(self, import_patterns, line):
+    def test_matches_import_patterns(
+        self, import_patterns: list[re.Pattern[str]], line: str
+    ) -> None:
         # @req FR-20
         assert matches_any(import_patterns, line)
 
@@ -103,7 +113,9 @@ class TestSourcePatternMatching:
             "my_litellm = None",
         ],
     )
-    def test_rejects_non_import_patterns(self, import_patterns, line):
+    def test_rejects_non_import_patterns(
+        self, import_patterns: list[re.Pattern[str]], line: str
+    ) -> None:
         # @req FR-20
         assert not matches_any(import_patterns, line)
 
@@ -113,7 +125,7 @@ class TestSourcePatternMatching:
 
 class TestConfigPatternMatching:
     @pytest.fixture
-    def dep_patterns(self):
+    def dep_patterns(self) -> list[re.Pattern[str]]:
         return PyPIPlugin().dep_patterns("litellm")
 
     @pytest.mark.parametrize(
@@ -126,7 +138,9 @@ class TestConfigPatternMatching:
             "litellm",
         ],
     )
-    def test_matches_dep_patterns(self, dep_patterns, line):
+    def test_matches_dep_patterns(
+        self, dep_patterns: list[re.Pattern[str]], line: str
+    ) -> None:
         # @req FR-21
         assert matches_any(dep_patterns, line)
 
@@ -137,6 +151,8 @@ class TestConfigPatternMatching:
             "# litellm is great",
         ],
     )
-    def test_rejects_non_dep_patterns(self, dep_patterns, line):
+    def test_rejects_non_dep_patterns(
+        self, dep_patterns: list[re.Pattern[str]], line: str
+    ) -> None:
         # @req FR-21
         assert not matches_any(dep_patterns, line)

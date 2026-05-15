@@ -3,6 +3,8 @@
 Module under test: scan_supply_chain.persistence_scanner
 """
 
+from pathlib import Path
+
 import sys
 
 import pytest
@@ -31,7 +33,7 @@ _TMP_SCRIPTS_POSIX_ONLY = pytest.mark.skipif(
 
 
 class TestCheckCrontab:
-    def test_detects_package_in_crontab(self, monkeypatch):
+    def test_detects_package_in_crontab(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # @req FR-41
         mock_tool_available(monkeypatch, "persistence_scanner", "crontab")
         mock_run_safe(
@@ -46,7 +48,7 @@ class TestCheckCrontab:
         assert len(results.findings) == 1
         assert "crontab" in results.findings[0].description
 
-    def test_clean_when_no_match(self, monkeypatch):
+    def test_clean_when_no_match(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # @req FR-41
         mock_tool_available(monkeypatch, "persistence_scanner", "crontab")
         mock_run_safe(
@@ -60,7 +62,7 @@ class TestCheckCrontab:
 
         assert results.findings == []
 
-    def test_skips_when_crontab_unavailable(self, monkeypatch):
+    def test_skips_when_crontab_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # @req FR-41 NFR-03
         monkeypatch.setattr(
             "scan_supply_chain.persistence_scanner.shutil.which",
@@ -72,7 +74,7 @@ class TestCheckCrontab:
 
         assert results.findings == []
 
-    def test_handles_timeout(self, monkeypatch):
+    def test_handles_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # @req FR-41 NFR-04
         mock_tool_available(monkeypatch, "persistence_scanner", "crontab")
         mock_run_safe(monkeypatch, "persistence_scanner", None)
@@ -87,7 +89,7 @@ class TestCheckCrontab:
 
 
 class TestCheckShellRc:
-    def test_detects_package_in_bashrc(self, tmp_path, monkeypatch):
+    def test_detects_package_in_bashrc(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         # @req FR-41
         monkeypatch.setattr(
             "scan_supply_chain.persistence_scanner.Path.home", lambda: tmp_path
@@ -99,7 +101,7 @@ class TestCheckShellRc:
 
         assert len(results.findings) == 1
 
-    def test_ignores_normal_rc(self, tmp_path, monkeypatch):
+    def test_ignores_normal_rc(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         # @req FR-41
         monkeypatch.setattr(
             "scan_supply_chain.persistence_scanner.Path.home", lambda: tmp_path
@@ -116,7 +118,7 @@ class TestCheckShellRc:
 
 
 class TestCheckConfigDir:
-    def test_flags_file_mentioning_package(self, tmp_path):
+    def test_flags_file_mentioning_package(self, tmp_path: Path) -> None:
         # @req FR-41
         config_dir = tmp_path / "systemd" / "user"
         config_dir.mkdir(parents=True)
@@ -132,7 +134,7 @@ class TestCheckConfigDir:
         assert len(results.findings) == 1
         assert "systemd" in results.findings[0].description
 
-    def test_ignores_file_without_package(self, tmp_path):
+    def test_ignores_file_without_package(self, tmp_path: Path) -> None:
         # @req FR-41
         config_dir = tmp_path / "systemd" / "user"
         config_dir.mkdir(parents=True)
@@ -147,7 +149,7 @@ class TestCheckConfigDir:
 
         assert results.findings == []
 
-    def test_ignores_xdg_desktop_without_package(self, tmp_path):
+    def test_ignores_xdg_desktop_without_package(self, tmp_path: Path) -> None:
         # @req FR-41
         autostart = tmp_path / "autostart"
         autostart.mkdir()
@@ -162,7 +164,7 @@ class TestCheckConfigDir:
 
         assert results.findings == []
 
-    def test_flags_xdg_desktop_mentioning_package(self, tmp_path):
+    def test_flags_xdg_desktop_mentioning_package(self, tmp_path: Path) -> None:
         # @req FR-41
         autostart = tmp_path / "autostart"
         autostart.mkdir()
@@ -177,7 +179,7 @@ class TestCheckConfigDir:
 
         assert len(results.findings) == 1
 
-    def test_skips_missing_directory(self, tmp_path):
+    def test_skips_missing_directory(self, tmp_path: Path) -> None:
         # @req FR-41 NFR-03
         results = ScanResults()
         _check_config_dir(
@@ -191,7 +193,7 @@ class TestCheckConfigDir:
 
         assert results.findings == []
 
-    def test_matches_non_package_keyword(self, tmp_path):
+    def test_matches_non_package_keyword(self, tmp_path: Path) -> None:
         # @req FR-41
         # Persistence keyword (e.g. a daemon name) unrelated to the package
         # itself must still trigger a finding.
@@ -221,7 +223,7 @@ class TestCheckConfigDir:
 
 @_TMP_SCRIPTS_POSIX_ONLY
 class TestCheckTmpScripts:
-    def test_flags_tmp_py_importing_package(self, tmp_as_tmp):
+    def test_flags_tmp_py_importing_package(self, tmp_as_tmp: Path) -> None:
         # @req FR-41 FR-37
         (tmp_as_tmp / "backdoor.py").write_text("import litellm\nlitellm.run()\n")
 
@@ -230,7 +232,7 @@ class TestCheckTmpScripts:
 
         assert any("backdoor.py" in f.description for f in results.findings)
 
-    def test_ignores_tmp_py_without_import(self, tmp_as_tmp):
+    def test_ignores_tmp_py_without_import(self, tmp_as_tmp: Path) -> None:
         # @req FR-41 FR-38
         (tmp_as_tmp / "harmless.py").write_text("import os\nprint('hello')\n")
 
@@ -239,7 +241,7 @@ class TestCheckTmpScripts:
 
         assert results.findings == []
 
-    def test_ignores_tmp_py_with_string_mention_only(self, tmp_as_tmp):
+    def test_ignores_tmp_py_with_string_mention_only(self, tmp_as_tmp: Path) -> None:
         # @req FR-38
         (tmp_as_tmp / "scanner.py").write_text('name = "litellm"\nprint(name)\n')
 
@@ -248,7 +250,7 @@ class TestCheckTmpScripts:
 
         assert results.findings == []
 
-    def test_flags_tmp_sh_mentioning_package(self, tmp_as_tmp):
+    def test_flags_tmp_sh_mentioning_package(self, tmp_as_tmp: Path) -> None:
         # @req FR-41
         (tmp_as_tmp / "install.sh").write_text("#!/bin/bash\npip install litellm\n")
 
@@ -257,7 +259,7 @@ class TestCheckTmpScripts:
 
         assert any("install.sh" in f.description for f in results.findings)
 
-    def test_ignores_tmp_sh_without_package(self, tmp_as_tmp):
+    def test_ignores_tmp_sh_without_package(self, tmp_as_tmp: Path) -> None:
         # @req FR-41
         (tmp_as_tmp / "backup.sh").write_text(
             "#!/bin/bash\ntar czf backup.tar.gz /home\n"
@@ -273,7 +275,7 @@ class TestCheckTmpScripts:
 
 
 class TestScanPersistencePublicAPI:
-    def test_extra_keywords_propagate_to_shell_rc(self, tmp_path, monkeypatch):
+    def test_extra_keywords_propagate_to_shell_rc(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         # @req FR-41
         # Verify that profile-level persistence_keywords reach the
         # shell-rc checker even when the package name itself is absent.

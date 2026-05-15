@@ -5,6 +5,8 @@ Module under test: scan_supply_chain.ioc_windows
 These tests mock subprocess calls so they run on any platform.
 """
 
+import pytest
+
 from scan_supply_chain.ioc_windows import (
     _check_registry_run_keys,
     _check_scheduled_tasks,
@@ -17,7 +19,7 @@ from tests.conftest import mock_run_safe
 
 
 class TestRegistryRunKeys:
-    def test_flags_matching_keyword(self, monkeypatch, capsys):
+    def test_flags_matching_keyword(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
         # @req FR-28
         mock_run_safe(
             monkeypatch,
@@ -30,7 +32,7 @@ class TestRegistryRunKeys:
 
         assert any("registry:" in ioc for ioc in results.iocs)
 
-    def test_clean_when_no_keywords_match(self, monkeypatch, capsys):
+    def test_clean_when_no_keywords_match(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
         # @req FR-28
         mock_run_safe(
             monkeypatch,
@@ -45,14 +47,14 @@ class TestRegistryRunKeys:
         captured = capsys.readouterr().out
         assert "No suspicious" in captured
 
-    def test_skips_when_keywords_empty(self, capsys):
+    def test_skips_when_keywords_empty(self, capsys: pytest.CaptureFixture[str]) -> None:
         # @req FR-28
         results = ScanResults()
         _check_registry_run_keys(results, [])
 
         assert results.iocs == []
 
-    def test_handles_timeout(self, monkeypatch, capsys):
+    def test_handles_timeout(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
         # @req FR-28 NFR-04
         mock_run_safe(monkeypatch, "ioc_windows", None)
 
@@ -66,7 +68,7 @@ class TestRegistryRunKeys:
 
 
 class TestScheduledTasks:
-    def test_flags_matching_keyword(self, monkeypatch, capsys):
+    def test_flags_matching_keyword(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
         # @req FR-29
         mock_run_safe(
             monkeypatch,
@@ -79,7 +81,7 @@ class TestScheduledTasks:
 
         assert any("schtask:" in ioc for ioc in results.iocs)
 
-    def test_clean_when_no_keywords_match(self, monkeypatch, capsys):
+    def test_clean_when_no_keywords_match(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
         # @req FR-29
         mock_run_safe(
             monkeypatch,
@@ -94,14 +96,14 @@ class TestScheduledTasks:
         captured = capsys.readouterr().out
         assert "No suspicious" in captured
 
-    def test_skips_when_keywords_empty(self, capsys):
+    def test_skips_when_keywords_empty(self, capsys: pytest.CaptureFixture[str]) -> None:
         # @req FR-29
         results = ScanResults()
         _check_scheduled_tasks(results, [])
 
         assert results.iocs == []
 
-    def test_handles_timeout(self, monkeypatch, capsys):
+    def test_handles_timeout(self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
         # @req FR-29 NFR-04
         mock_run_safe(monkeypatch, "ioc_windows", None)
 

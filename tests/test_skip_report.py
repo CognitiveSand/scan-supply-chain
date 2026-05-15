@@ -25,26 +25,26 @@ _POSIX_PERMS_REASON = "POSIX permission bits ineffective (Windows or root)"
 
 
 class TestSkipReport:
-    def test_empty_by_default(self):
+    def test_empty_by_default(self) -> None:
         report = SkipReport()
         assert report.is_empty
         assert report.total == 0
 
-    def test_records_permission_error(self):
+    def test_records_permission_error(self) -> None:
         report = SkipReport()
         report.record_permission(Path("/opt/locked"))
         assert not report.is_empty
         assert Path("/opt/locked") in report.permission_errors
         assert report.total == 1
 
-    def test_records_read_error(self):
+    def test_records_read_error(self) -> None:
         report = SkipReport()
         report.record_read_error(Path("/var/x"), "FileNotFoundError")
         assert not report.is_empty
         assert report.read_errors[Path("/var/x")] == "FileNotFoundError"
         assert report.total == 1
 
-    def test_deduplicates_permission_paths(self):
+    def test_deduplicates_permission_paths(self) -> None:
         report = SkipReport()
         report.record_permission(Path("/opt/locked"))
         report.record_permission(Path("/opt/locked"))
@@ -56,7 +56,7 @@ class TestSkipReport:
 
 class TestPrunedWalkInstrumentation:
     @pytest.mark.skipif(_POSIX_PERMS_INEFFECTIVE, reason=_POSIX_PERMS_REASON)
-    def test_subdirectory_permission_error_is_recorded(self, tmp_path):
+    def test_subdirectory_permission_error_is_recorded(self, tmp_path: Path) -> None:
         """os.walk silently skips inaccessible sub-trees unless onerror is set.
 
         pruned_walk wires onerror through to the caller-supplied
@@ -82,7 +82,7 @@ class TestPrunedWalkInstrumentation:
 
 class TestReadIfContainsInstrumentation:
     @pytest.mark.skipif(_POSIX_PERMS_INEFFECTIVE, reason=_POSIX_PERMS_REASON)
-    def test_unreadable_file_is_recorded(self, tmp_path):
+    def test_unreadable_file_is_recorded(self, tmp_path: Path) -> None:
         secret = tmp_path / "secret.txt"
         secret.write_text("contains the keyword")
         secret.chmod(0o000)
@@ -95,7 +95,7 @@ class TestReadIfContainsInstrumentation:
         assert result is None
         assert secret in report.permission_errors
 
-    def test_missing_file_is_not_recorded(self, tmp_path):
+    def test_missing_file_is_not_recorded(self, tmp_path: Path) -> None:
         """read_if_contains returns None for missing files without recording.
 
         The path.is_file() guard means missing files never enter the

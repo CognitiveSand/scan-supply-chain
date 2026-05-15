@@ -5,6 +5,8 @@ Module under test: scan_supply_chain.version_checker
                and scan_supply_chain.ecosystem_npm
 """
 
+from pathlib import Path
+
 import json
 
 import pytest
@@ -27,10 +29,12 @@ def _sr() -> SkipReport:
 
 class TestPyPIExtractVersion:
     @pytest.fixture
-    def plugin(self):
+    def plugin(self) -> PyPIPlugin:
         return PyPIPlugin()
 
-    def test_reads_version_from_metadata_file(self, tmp_path, plugin):
+    def test_reads_version_from_metadata_file(
+        self, tmp_path: Path, plugin: PyPIPlugin
+    ) -> None:
         # @req FR-08
         dist_info = tmp_path / "litellm-1.82.7.dist-info"
         dist_info.mkdir()
@@ -39,7 +43,9 @@ class TestPyPIExtractVersion:
         )
         assert plugin.extract_version(dist_info, _sr()) == "1.82.7"
 
-    def test_reads_version_from_pkg_info(self, tmp_path, plugin):
+    def test_reads_version_from_pkg_info(
+        self, tmp_path: Path, plugin: PyPIPlugin
+    ) -> None:
         # @req FR-08
         egg_info = tmp_path / "litellm-1.80.0.egg-info"
         egg_info.mkdir()
@@ -48,7 +54,9 @@ class TestPyPIExtractVersion:
         )
         assert plugin.extract_version(egg_info, _sr()) == "1.80.0"
 
-    def test_prefers_metadata_over_pkg_info(self, tmp_path, plugin):
+    def test_prefers_metadata_over_pkg_info(
+        self, tmp_path: Path, plugin: PyPIPlugin
+    ) -> None:
         # @req FR-08
         dist_info = tmp_path / "litellm-1.82.7.dist-info"
         dist_info.mkdir()
@@ -56,25 +64,33 @@ class TestPyPIExtractVersion:
         (dist_info / "PKG-INFO").write_text("Version: 1.82.6\n")
         assert plugin.extract_version(dist_info, _sr()) == "1.82.7"
 
-    def test_falls_back_to_dirname_when_no_metadata(self, tmp_path, plugin):
+    def test_falls_back_to_dirname_when_no_metadata(
+        self, tmp_path: Path, plugin: PyPIPlugin
+    ) -> None:
         # @req FR-08
         dist_info = tmp_path / "litellm-1.82.7.dist-info"
         dist_info.mkdir()
         assert plugin.extract_version(dist_info, _sr()) == "1.82.7"
 
-    def test_falls_back_to_dirname_for_egg_info(self, tmp_path, plugin):
+    def test_falls_back_to_dirname_for_egg_info(
+        self, tmp_path: Path, plugin: PyPIPlugin
+    ) -> None:
         # @req FR-08
         egg_info = tmp_path / "litellm-1.80.0.egg-info"
         egg_info.mkdir()
         assert plugin.extract_version(egg_info, _sr()) == "1.80.0"
 
-    def test_returns_none_for_unrecognized_directory(self, tmp_path, plugin):
+    def test_returns_none_for_unrecognized_directory(
+        self, tmp_path: Path, plugin: PyPIPlugin
+    ) -> None:
         # @req FR-08
         unknown = tmp_path / "unknown-dir"
         unknown.mkdir()
         assert plugin.extract_version(unknown, _sr()) is None
 
-    def test_strips_whitespace_from_version(self, tmp_path, plugin):
+    def test_strips_whitespace_from_version(
+        self, tmp_path: Path, plugin: PyPIPlugin
+    ) -> None:
         # @req FR-08
         dist_info = tmp_path / "litellm-1.82.7.dist-info"
         dist_info.mkdir()
@@ -93,7 +109,9 @@ class TestPyPIExtractVersion:
             "1.82.7rc1",
         ],
     )
-    def test_handles_various_version_formats(self, tmp_path, plugin, version):
+    def test_handles_various_version_formats(
+        self, tmp_path: Path, plugin: PyPIPlugin, version: str
+    ) -> None:
         # @req FR-08
         dist_info = tmp_path / f"litellm-{version}.dist-info"
         dist_info.mkdir()
@@ -106,10 +124,12 @@ class TestPyPIExtractVersion:
 
 class TestNpmExtractVersion:
     @pytest.fixture
-    def plugin(self):
+    def plugin(self) -> NpmPlugin:
         return NpmPlugin()
 
-    def test_reads_version_from_package_json(self, tmp_path, plugin):
+    def test_reads_version_from_package_json(
+        self, tmp_path: Path, plugin: NpmPlugin
+    ) -> None:
         # @req FR-09
         pkg_dir = tmp_path / "axios"
         pkg_dir.mkdir()
@@ -118,20 +138,26 @@ class TestNpmExtractVersion:
         )
         assert plugin.extract_version(pkg_dir, _sr()) == "1.14.1"
 
-    def test_returns_none_when_no_package_json(self, tmp_path, plugin):
+    def test_returns_none_when_no_package_json(
+        self, tmp_path: Path, plugin: NpmPlugin
+    ) -> None:
         # @req FR-09
         pkg_dir = tmp_path / "axios"
         pkg_dir.mkdir()
         assert plugin.extract_version(pkg_dir, _sr()) is None
 
-    def test_returns_none_for_invalid_json(self, tmp_path, plugin):
+    def test_returns_none_for_invalid_json(
+        self, tmp_path: Path, plugin: NpmPlugin
+    ) -> None:
         # @req FR-09
         pkg_dir = tmp_path / "axios"
         pkg_dir.mkdir()
         (pkg_dir / "package.json").write_text("not json")
         assert plugin.extract_version(pkg_dir, _sr()) is None
 
-    def test_returns_none_when_version_field_missing(self, tmp_path, plugin):
+    def test_returns_none_when_version_field_missing(
+        self, tmp_path: Path, plugin: NpmPlugin
+    ) -> None:
         # @req FR-09
         pkg_dir = tmp_path / "axios"
         pkg_dir.mkdir()
@@ -143,7 +169,9 @@ class TestNpmExtractVersion:
 
 
 class TestScanEnvironments:
-    def test_reports_compromised_installation(self, tmp_path, capsys):
+    def test_reports_compromised_installation(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         # @req FR-10
         dist_info = tmp_path / "litellm-1.82.7.dist-info"
         dist_info.mkdir()
@@ -159,7 +187,9 @@ class TestScanEnvironments:
         captured = capsys.readouterr().out
         assert "COMPROMISED" in captured
 
-    def test_reports_safe_installation(self, tmp_path, capsys):
+    def test_reports_safe_installation(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         # @req FR-10
         dist_info = tmp_path / "litellm-1.82.6.dist-info"
         dist_info.mkdir()
@@ -174,7 +204,9 @@ class TestScanEnvironments:
         captured = capsys.readouterr().out
         assert "clean" in captured
 
-    def test_reports_no_installations_found(self, capsys):
+    def test_reports_no_installations_found(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         # @req FR-10
         threat = make_litellm_threat()
         ecosystem = PyPIPlugin()
