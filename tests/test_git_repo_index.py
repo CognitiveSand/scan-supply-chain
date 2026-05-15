@@ -57,7 +57,9 @@ class TestBuildRepoIndex:
     def test_returns_empty_when_no_git_dirs(self, tmp_path: Path) -> None:
         assert build_repo_index([str(tmp_path)], SkipReport()) == []
 
-    def test_discovers_single_repo(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_discovers_single_repo(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         _disable_git_log(monkeypatch)
         _make_repo(tmp_path / "proj", description="my project")
 
@@ -69,7 +71,9 @@ class TestBuildRepoIndex:
         assert snap.repo_root.name == "proj"
         assert snap.description == "my project"
 
-    def test_reads_refs_heads(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_reads_refs_heads(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         _disable_git_log(monkeypatch)
         _make_repo(
             tmp_path / "proj",
@@ -81,7 +85,9 @@ class TestBuildRepoIndex:
         assert "main" in snap.local_branches
         assert "feature/fremen" in snap.local_branches
 
-    def test_reads_packed_refs(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_reads_packed_refs(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         _disable_git_log(monkeypatch)
         packed = (
             "# pack-refs with: peeled fully-peeled sorted\n"
@@ -100,7 +106,9 @@ class TestBuildRepoIndex:
         assert "refs/remotes/origin/main" not in snap.local_branches
         assert "origin/main" not in snap.local_branches
 
-    def test_lists_workflow_files(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_lists_workflow_files(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         _disable_git_log(monkeypatch)
         _make_repo(
             tmp_path / "proj",
@@ -116,7 +124,9 @@ class TestBuildRepoIndex:
         names = {p.name for p in snap.workflow_files}
         assert names == {"ci.yml", "discussion.yaml"}
 
-    def test_does_not_descend_into_git_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_does_not_descend_into_git_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """A spurious .git named directory inside .git/ must not yield a repo."""
         _disable_git_log(monkeypatch)
         _make_repo(tmp_path / "proj")
@@ -128,7 +138,9 @@ class TestBuildRepoIndex:
         assert len(snapshots) == 1
         assert snapshots[0].repo_root.name == "proj"
 
-    def test_deduplicates_by_real_path(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_deduplicates_by_real_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """A symlinked alias to the same repo should be returned once."""
         _disable_git_log(monkeypatch)
         _make_repo(tmp_path / "proj")
@@ -141,7 +153,9 @@ class TestBuildRepoIndex:
 
         assert len(snapshots) == 1
 
-    def test_skips_node_modules(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_skips_node_modules(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Repos under node_modules / site-packages must not be discovered."""
         _disable_git_log(monkeypatch)
         _make_repo(tmp_path / "outer")
@@ -152,7 +166,9 @@ class TestBuildRepoIndex:
         roots = {s.repo_root.name for s in snapshots}
         assert roots == {"outer"}
 
-    def test_skips_when_git_binary_absent(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_skips_when_git_binary_absent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """recent_author_emails is empty when git is not on PATH."""
         monkeypatch.setattr(
             "scan_supply_chain.git_repo_index.shutil.which", lambda _: None
@@ -163,7 +179,9 @@ class TestBuildRepoIndex:
 
         assert snap.recent_author_emails == ()
 
-    def test_collects_unique_recent_emails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_collects_unique_recent_emails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Author emails from git log are deduplicated, order preserved."""
         monkeypatch.setattr(
             "scan_supply_chain.git_repo_index.shutil.which",

@@ -62,7 +62,9 @@ class TestCheckCrontab:
 
         assert results.findings == []
 
-    def test_skips_when_crontab_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_skips_when_crontab_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # @req FR-41 NFR-03
         monkeypatch.setattr(
             "scan_supply_chain.persistence_scanner.shutil.which",
@@ -89,7 +91,9 @@ class TestCheckCrontab:
 
 
 class TestCheckShellRc:
-    def test_detects_package_in_bashrc(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_detects_package_in_bashrc(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # @req FR-41
         monkeypatch.setattr(
             "scan_supply_chain.persistence_scanner.Path.home", lambda: tmp_path
@@ -101,7 +105,9 @@ class TestCheckShellRc:
 
         assert len(results.findings) == 1
 
-    def test_ignores_normal_rc(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_ignores_normal_rc(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # @req FR-41
         monkeypatch.setattr(
             "scan_supply_chain.persistence_scanner.Path.home", lambda: tmp_path
@@ -275,7 +281,9 @@ class TestCheckTmpScripts:
 
 
 class TestScanPersistencePublicAPI:
-    def test_extra_keywords_propagate_to_shell_rc(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_extra_keywords_propagate_to_shell_rc(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # @req FR-41
         # Verify that profile-level persistence_keywords reach the
         # shell-rc checker even when the package name itself is absent.

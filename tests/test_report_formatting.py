@@ -25,7 +25,9 @@ from tests.conftest import LITELLM_COMPROMISED, make_litellm_threat
 
 
 class TestPrintSourceRefs:
-    def test_prints_clean_message_when_no_refs(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_prints_clean_message_when_no_refs(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         # @req FR-20
         print_source_refs([], "litellm")
         captured = capsys.readouterr().out
@@ -44,7 +46,9 @@ class TestPrintSourceRefs:
         assert "/a.py" in captured
         assert "/b.py" in captured
 
-    def test_truncates_long_file_lists(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_truncates_long_file_lists(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         # @req FR-20
         refs = [SourceReference("/a.py", i, f"line{i}") for i in range(1, 10)]
         print_source_refs(refs, "litellm")
@@ -56,13 +60,17 @@ class TestPrintSourceRefs:
 
 
 class TestPrintConfigRefs:
-    def test_prints_clean_message_when_no_refs(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_prints_clean_message_when_no_refs(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         # @req FR-21
         print_config_refs([], "litellm", LITELLM_COMPROMISED)
         captured = capsys.readouterr().out
         assert "No litellm dependencies found" in captured
 
-    def test_prints_compromised_version_tag(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_prints_compromised_version_tag(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         # @req FR-22
         refs = [
             ConfigReference("r.txt", 1, "litellm==1.82.7", "1.82.7"),
@@ -93,7 +101,9 @@ class TestPrintThreatReport:
         captured = capsys.readouterr().out
         assert "No compromise detected" in captured
 
-    def test_prints_compromised_verdict(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_prints_compromised_verdict(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         # @req FR-23
         threat = make_litellm_threat()
         results = ScanResults(

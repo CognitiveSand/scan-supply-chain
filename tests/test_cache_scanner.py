@@ -17,7 +17,9 @@ from scan_supply_chain.skip_report import SkipReport
 
 
 class TestScanPipCache:
-    def test_finds_package_in_pip_cache(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_finds_package_in_pip_cache(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # @req FR-42
         monkeypatch.setattr(
             "scan_supply_chain.cache_scanner._pip_cache_dir", lambda: tmp_path
@@ -30,7 +32,9 @@ class TestScanPipCache:
         assert len(results.findings) == 1
         assert "pip cache" in results.findings[0].description
 
-    def test_clean_when_no_match(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_clean_when_no_match(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # @req FR-42
         monkeypatch.setattr(
             "scan_supply_chain.cache_scanner._pip_cache_dir", lambda: tmp_path
@@ -42,7 +46,9 @@ class TestScanPipCache:
 
         assert results.findings == []
 
-    def test_handles_missing_cache(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_handles_missing_cache(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # @req FR-42 NFR-03
         monkeypatch.setattr(
             "scan_supply_chain.cache_scanner._pip_cache_dir",
@@ -56,7 +62,9 @@ class TestScanPipCache:
 
 
 class TestScanNpmCache:
-    def test_finds_package_in_npm_cache(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_finds_package_in_npm_cache(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # @req FR-42
         monkeypatch.setattr(
             "scan_supply_chain.cache_scanner.Path.home", lambda: tmp_path
@@ -71,7 +79,9 @@ class TestScanNpmCache:
         assert len(results.findings) == 1
         assert "npm cache" in results.findings[0].description
 
-    def test_clean_when_no_match(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_clean_when_no_match(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # @req FR-42
         monkeypatch.setattr(
             "scan_supply_chain.cache_scanner.Path.home", lambda: tmp_path
@@ -87,7 +97,9 @@ class TestScanNpmCache:
 
 
 class TestScanPnpmStore:
-    def test_finds_package_in_pnpm_store(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_finds_package_in_pnpm_store(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # @req FR-42
         monkeypatch.setattr(
             "scan_supply_chain.cache_scanner.Path.home", lambda: tmp_path
@@ -103,7 +115,12 @@ class TestScanPnpmStore:
 
 
 class TestScanCachesIntegration:
-    def test_skips_npm_for_pypi(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_skips_npm_for_pypi(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
         # @req FR-42
         monkeypatch.setattr(
             "scan_supply_chain.cache_scanner._pip_cache_dir",
@@ -116,7 +133,12 @@ class TestScanCachesIntegration:
         captured = capsys.readouterr().out
         assert "No cache traces" in captured
 
-    def test_skips_pip_for_npm(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_skips_pip_for_npm(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
         # @req FR-42
         monkeypatch.setattr(
             "scan_supply_chain.cache_scanner.Path.home", lambda: tmp_path
