@@ -3,6 +3,10 @@
 Module under test: scan_supply_chain.persistence_scanner
 """
 
+import sys
+
+import pytest
+
 from scan_supply_chain.models import ScanResults
 from scan_supply_chain.skip_report import SkipReport
 from tests.conftest import mock_run_safe, mock_tool_available
@@ -12,6 +16,14 @@ from scan_supply_chain.persistence_scanner import (
     _check_shell_rc,
     _check_tmp_scripts,
     scan_persistence,
+)
+
+# _check_tmp_scripts itself short-circuits on win32 (persistence_scanner.py
+# guards Path("/tmp") behind sys.platform != "win32"), so the whole class
+# below is POSIX-only by design.
+_TMP_SCRIPTS_POSIX_ONLY = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="_check_tmp_scripts is POSIX-only (no /tmp on Windows)",
 )
 
 
@@ -207,6 +219,7 @@ class TestCheckConfigDir:
 # ── _check_tmp_scripts (AST-verified) ───────────────────────────────
 
 
+@_TMP_SCRIPTS_POSIX_ONLY
 class TestCheckTmpScripts:
     def test_flags_tmp_py_importing_package(self, tmp_as_tmp):
         # @req FR-41 FR-37

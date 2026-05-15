@@ -284,8 +284,13 @@ class TestPerRepoScoping:
         )
         # Repo A: 1 HIGH (description).
         # Repo B: 1 LOW (branch alone, no corroborating strong signal).
+        # The scanner emits str(Path(...)) for evidence; on Windows that
+        # uses backslashes, so build the expected dict the same way.
         by_evidence = {f.evidence: f.weight for f in results.findings}
-        assert by_evidence == {"/repo/A": HIGH, "/repo/B": LOW}
+        assert by_evidence == {
+            str(Path("/repo/A")): HIGH,
+            str(Path("/repo/B")): LOW,
+        }
 
 
 # ── Aggregation across threat profiles ──────────────────────────────────
